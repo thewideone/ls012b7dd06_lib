@@ -19,8 +19,10 @@ typedef struct {
 
 typedef struct {
     int gpio_bus[24];
+    // I2S clock output pin
     int gpio_clk;
-    int clock_speed_hz;
+
+    uint32_t clock_speed_hz;
 
     // When set, makes WS active low
     // (adds a leading and trailing edge of the clock line).

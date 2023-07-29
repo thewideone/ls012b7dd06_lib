@@ -16,6 +16,14 @@
 
 #include "driver/gpio.h"    // for testing purposes
 
+// For APLL clock
+#include "soc/rtc_cntl_reg.h"
+#include "soc/rtc.h"
+
+#include "soc/syscon_reg.h"
+#include "soc/rtc_cntl_struct.h"
+// 
+
 #include "i2s_parallel.h"
 
 // #include "../ls012b7dd06.h"
@@ -621,7 +629,7 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     fifo_reset(dev);
     
     dev->conf2.val = 0;
-    dev->conf2.lcd_en = 1;          // enable LCD mode
+    dev->conf2.lcd_en = 1;          // Enable LCD mode
     dev->conf2.lcd_tx_wrx2_en = 1;  // '1' - makes the device transmit whole clock period per bit of data
                                     //     (that is slows down data lines 2x)
     dev->conf2.lcd_tx_sdx2_en = 0;  // '1' - makes the device transmit every bit of data twice
@@ -629,17 +637,100 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     dev->sample_rate_conf.val = 0;
     dev->sample_rate_conf.rx_bits_mod = config->bits;
     dev->sample_rate_conf.tx_bits_mod = config->bits;
-    dev->sample_rate_conf.rx_bck_div_num = 4; //ToDo: Unsure about what this does...
-    dev->sample_rate_conf.tx_bck_div_num = 4;
-    
 
-    // rtc_clk_apll_enable( true );
-    dev->clkm_conf.val = 0;
-    dev->clkm_conf.clka_en = 0;
-    dev->clkm_conf.clkm_div_a = 2;//63;
-    dev->clkm_conf.clkm_div_b = 2;//63;
-    //We ignore the possibility for fractional division here.
-    dev->clkm_conf.clkm_div_num = 80000000L/config->clock_speed_hz;
+    // 
+    // Configure clock source, and clock divisors for I2S_CLK and I2SnO_BCK_out.
+    // For details see section 12.3 of ESP32 technical reference manual.
+    // 
+
+    // Set I2SnO_BCK_out divisor value
+    // 
+    // f_I2SnO_BCK_out = 1 / M,
+    // where M = dev->sample_rate_conf.tx_bck_div_num
+    // 
+    // The lowest value which gives stable results is 2.
+    // Value 1 results in some phase-shift errors.
+    dev->sample_rate_conf.rx_bck_div_num = 2; 
+    dev->sample_rate_conf.tx_bck_div_num = 2;
+
+    ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source to %ldHz...", config->clock_speed_hz );
+    
+    ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Rebooting APLL clock..." );
+    
+    // Configure APLL clock
+    RTCCNTL.ana_conf.plla_force_pd = 0; // Power down APLL
+    RTCCNTL.ana_conf.plla_force_pu = 1; // Power up APLL
+    
+    // From esp-idf/components/esp_hw_support/port/esp32/rtc_clk.c/rtc_clk_apll_coeff_calc() we get:
+    // apll_freq = xtal_freq * (4 + sdm2 + sdm1/256 + sdm0/65536) / ((o_div + 2) * 2)
+    //             ----------------------------------------------   -----------------
+    //                  350 MHz <= Numerator <= 500 MHz                Denominator
+    // 
+    // So f_APLL_CLK has to be greater than 5303031Hz.
+    unsigned long expected_apll_freq = 10000000;
+
+    uint32_t o_div;
+    uint32_t sdm0;
+    uint32_t sdm1;
+    uint32_t sdm2;
+
+    ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Calculating APLL coefficients for frequency %luHz...", expected_apll_freq );
+
+    // Try to calculate APLL formula coefficients and, if succeeded, apply them.
+    if( rtc_clk_apll_coeff_calc( expected_apll_freq, &o_div, &sdm0, &sdm1, &sdm2) ){
+        ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: APLL coefficients found: o_div = %lu, sdm0 = %lu, sdm1 = %lu, sdm2 = %lu.",
+                        o_div, sdm0, sdm1, sdm2 );
+
+        // 40MHz is the default XTAL frequency
+        float apll_freq = (float)40000000 * (4.0 + (float)sdm2 + (float)sdm1/256 + (float)sdm0/65536) / (float)((o_div + 2) * 2);
+        ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Resulting APLL frequency: %fHz.", apll_freq );
+
+        ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Applying APLL coefficients..." );
+        rtc_clk_apll_coeff_set( o_div, sdm0, sdm1, sdm2);
+
+        ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Enabling APLL..." );
+        rtc_clk_apll_enable( true );
+
+        dev->clkm_conf.val = 0;     // Reset I2S clock configuration
+        dev->clkm_conf.clka_en = 1; // Switch to APLL clock source
+
+        // f_I2Sn_CLK = f_APLL_CLK / (N + b/a)
+        // where N = dev->clkm_conf.clkm_div_num
+        dev->clkm_conf.clkm_div_a = 1;
+        dev->clkm_conf.clkm_div_b = 0;
+
+        // We ignore the possibility for fractional division here.
+        // N = ( f_APLL_CLK / f_I2Sn_CLK ) - b/a
+        dev->clkm_conf.clkm_div_num = ( (uint32_t)apll_freq / config->clock_speed_hz ) - ( dev->clkm_conf.clkm_div_b / dev->clkm_conf.clkm_div_a );
+
+        ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Resulting I2S%d_CLK frequency should be %fHz.",
+                        i2s_getDevNum( dev ),
+                        apll_freq / (float)((float)dev->clkm_conf.clkm_div_num + (float)(dev->clkm_conf.clkm_div_b)/(dev->clkm_conf.clkm_div_a)) );
+    }
+    else {
+        ESP_LOGW( TAG, "i2s_parallel_setup(): Failed to calculate APLL coefficients. Proceeding with PLL_D2_CLK as clock source." );
+
+        // Reset I2S clock configuration
+        dev->clkm_conf.val = 0;
+
+        dev->clkm_conf.clka_en = 0;     // Select PLL_D2_CLK as clock source (160MHz clock divided by 2)
+        dev->clkm_conf.clkm_div_a = 1;
+        dev->clkm_conf.clkm_div_b = 0;
+
+        // We ignore the possibility for fractional division here.
+        // N = ( PLL_D2_CLK / f_I2Sn_CLK ) - b/a
+        // Default value of PLL_D2_CLK is 160MHz / 2 = 80MHz.
+        dev->clkm_conf.clkm_div_num = 80000000L/config->clock_speed_hz;
+
+        ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Resulting I2S%d_CLK frequency should be %fHz.",
+                        i2s_getDevNum( dev ),
+                        (float)( 80000000.0 / (dev->clkm_conf.clkm_div_num + (dev->clkm_conf.clkm_div_b)/(dev->clkm_conf.clkm_div_a)) ) );
+    }
+
+    ESP_LOGD( TAG, "i2s_parallel_setup(): I2S clock configured with:" );
+    ESP_LOGD( TAG, "i2s_parallel_setup(): \t clka_en = %d, clkm_div_a = %d, clkm_div_b = %d, clkm_div_num = %d,",
+                    dev->clkm_conf.clka_en, dev->clkm_conf.clkm_div_a, dev->clkm_conf.clkm_div_b, dev->clkm_conf.clkm_div_num );
+    ESP_LOGD( TAG, "i2s_parallel_setup(): \t tx_bck_div_num = %d, rx_bck_div_num = %d.", dev->sample_rate_conf.tx_bck_div_num, dev->sample_rate_conf.rx_bck_div_num );
     
     dev->fifo_conf.val = 0;
     dev->fifo_conf.rx_fifo_mod_force_en = 1; // From datasheet: "The bit should always be set to 1" but why?
