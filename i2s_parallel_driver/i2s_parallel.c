@@ -653,7 +653,7 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     dev->sample_rate_conf.rx_bck_div_num = 2; 
     dev->sample_rate_conf.tx_bck_div_num = 2;
 
-    ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source to %ldHz...", config->clock_speed_hz );
+    ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source to %ldHz:", config->clock_speed_hz );
     
     ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Rebooting APLL clock..." );
     
@@ -854,6 +854,8 @@ void i2s_send_buf( i2s_dev_t *dev ){ //, i2s_parallel_buffer_desc_t* data_buf ) 
     ESP_ERROR_CHECK( esp_intr_disable( i2s_intr_handle ) );
     i2s_reset( dev );
     // i2s_stop( dev );
+    dev->conf.tx_start = 0;
+    dev->conf.rx_start = 0;
 
     int no = i2s_getDevNum(dev);
     if (i2s_state[no]==NULL){
