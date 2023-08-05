@@ -462,12 +462,14 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
             out_data_buf[ out_buf_line_start_idx + i ] = ( 1 << GPIO_BUS_BSP_BIT );
         // Encode GEN control signal
+        for( uint8_t i = 0; i < THHGCK_LEN; i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = 0x00;
         // "..._PERIOD_CNT-1" is because let's wait for the falling edge of BCK
-        for( uint8_t i=0; i < RGB_CLK_TRAILING_DUMMY_PERIOD_CNT-1; i++ )
+        for( uint8_t i = THHGCK_LEN; i < ( THHGCK_LEN + THWGEN_LEN ); i++ )
             out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
-        // During the last 2 periods GEN is low
-        out_data_buf[ out_buf_line_end_idx - 1 ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
-        out_data_buf[ out_buf_line_end_idx ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
+        // // During the last 2 periods GEN is low
+        // out_data_buf[ out_buf_line_end_idx - 1 ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
+        // out_data_buf[ out_buf_line_end_idx ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
 
         // Fill the buffer with MSB of pixel data in current line
         
@@ -495,11 +497,16 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
             out_data_buf[ out_buf_line_start_idx + i ] = ( 1 << GPIO_BUS_BSP_BIT );
         // Encode GEN control signal
-        for( uint8_t i=0; i < RGB_CLK_TRAILING_DUMMY_PERIOD_CNT-1; i++ )
+        for( uint8_t i = 0; i < THHGCK_LEN; i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = 0x00;
+        // "..._PERIOD_CNT-1" is because let's wait for the falling edge of BCK
+        for( uint8_t i = THHGCK_LEN; i < ( THHGCK_LEN + THWGEN_LEN ); i++ )
             out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
-        // During the last 2 periods GEN is low
-        out_data_buf[ out_buf_line_end_idx - 1 ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
-        out_data_buf[ out_buf_line_end_idx ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
+        // for( uint8_t i=0; i < RGB_CLK_TRAILING_DUMMY_PERIOD_CNT-1; i++ )
+        //     out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
+        // // During the last 2 periods GEN is low
+        // out_data_buf[ out_buf_line_end_idx - 1 ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
+        // out_data_buf[ out_buf_line_end_idx ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
 
         // Fill the buffer with LSB of pixel data in current line
 
@@ -752,17 +759,17 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
 
     
     dev->conf_chan.val = 0;
-    dev->conf_chan.tx_chan_mod = config->tx_chan_mod; // Datasheet 12.4.4 Sending Data: mono mode:
+    dev->conf_chan.tx_chan_mod = 1;//config->tx_chan_mod; // Datasheet 12.4.4 Sending Data: mono mode:
                                     // When I2S_TX_MSB_RIGHT equals 0, the left-channel data are ”holding”
                                     // their values and the right-channel data change into the left-channel data.
-    dev->conf_chan.rx_chan_mod = config->rx_chan_mod;
+    dev->conf_chan.rx_chan_mod = 1;//config->rx_chan_mod;
     
     // // Invert WS to be active-low... ToDo: make this configurable
     // dev->conf.tx_right_first = 1;   // "Set this bit to place right-channel data at the MSB in the transmit FIFO"
     // dev->conf.rx_right_first = 1;
     // Invert WS to be active-low... ToDo: make this configurable
-    dev->conf.tx_right_first = config->tx_right_first;   // "Set this bit to place right-channel data at the MSB in the transmit FIFO"
-    dev->conf.rx_right_first = config->rx_right_first;
+    dev->conf.tx_right_first = 1;//config->tx_right_first;   // "Set this bit to place right-channel data at the MSB in the transmit FIFO"
+    dev->conf.rx_right_first = 1;//config->rx_right_first;
     
     // !!! USEFUL !!!
     // Delay of clock line! Any many more...
@@ -773,6 +780,7 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     // From VGA controller source code:
     // clear serial mode flags
 	dev->conf.tx_msb_right = 0;
+    dev->conf.rx_msb_right = 0;
     // dev->conf.tx_msb_right = config->tx_msb_right;
     // dev->conf.rx_msb_right = config->rx_msb_right;
 

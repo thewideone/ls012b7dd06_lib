@@ -53,8 +53,24 @@ typedef union {
 #define GPIO_BUS_BSP_BIT 6
 #define GPIO_BUS_GEN_BIT 7
 
+// #define RLCD_BCK_FREQ 5000000
+
 #define RGB_CLK_LEADING_DUMMY_PERIOD_CNT 2
 // 35 periods are for 14us of GEN signaling
 #define RGB_CLK_TRAILING_DUMMY_PERIOD_CNT ( RGB_CLK_LEADING_DUMMY_PERIOD_CNT + 36 )
+
+// thwGEN defined by the number of pixels
+// that would be equivalently transmitted in that time.
+// 
+// thwGEN = 10us
+// thwGEN / ( tsRGB + thRGB ) = 10us / 400ns = 25
+#define THWGEN_LEN 25
+
+// thhGCK defined by the number of pixels
+// that would be equivalently transmitted in that time.
+// 
+// thhGCK = 4us
+// thhGCK / ( tsRGB + thRGB ) = 4us / 400ns = 10
+#define THHGCK_LEN 10
 
 #endif // _RLCD_CONFIG_H_

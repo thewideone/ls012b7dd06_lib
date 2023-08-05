@@ -100,7 +100,8 @@
 // extern i2s_parallel_buffer_desc_t bufdesc;
 
 // void rlcd_setupPins( void );
-void rlcd_init( i2s_parallel_config_t* cfg );
+void rlcd_init( void );
+// void rlcd_init( i2s_parallel_config_t* cfg );
 void rlcd_testGPIOs( uint8_t pins_state );
 
 void testTransmit( void );

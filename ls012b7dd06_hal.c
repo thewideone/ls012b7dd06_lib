@@ -220,7 +220,8 @@ void rlcd_testGPIOs( uint8_t pins_state ){
 
 i2s_parallel_buffer_desc_t bufdesc;
 
-void rlcd_init( i2s_parallel_config_t* cfg ){
+void rlcd_init( void ){
+// void rlcd_init( i2s_parallel_config_t* cfg ){
     rlcd_setupPins();
     rlcd_setAllGPIOs( 0 );
 
@@ -408,20 +409,48 @@ void rlcd_init( i2s_parallel_config_t* cfg ){
     //     .buf = &bufdesc                 // image buffer
     // };
 
-    cfg->buf = &bufdesc;
+    i2s_parallel_config_t cfg = {
+        .gpio_bus = {
+            RLCD_R0, 	// 0 : d0 
+            RLCD_R1, 	// 1 : d1
+            RLCD_G0, 	// 2 : d2
+            RLCD_G1, 	// 3 : d3
+            RLCD_B0, 	// 4 : d4
+            RLCD_B1, 	// 5 : d5
+            RLCD_BSP,	// 6 : d6 (HS?)
+            RLCD_GEN	// 7 : d7 (VS?)
+        },
+        .gpio_clk = RLCD_BCK,
+
+		// .tx_right_first = 1,
+		// .rx_right_first = 1,
+		// .tx_msb_right = 0,
+		// .rx_msb_right = 0,
+		// .tx_chan_mod = 1,
+		// .rx_chan_mod = 1,
+
+        .bits = I2S_PARALLEL_BITS_8,    // 8-bit mode (8 parallel output lines)
+        .clock_speed_hz = 2*2*1250000,  // 5MHz pixel clock frequency
+        .buf = &bufdesc                 // image buffer
+    };
+
+    // cfg->buf = &bufdesc;
 
     bufdesc.memory = rlcd_buf;
     bufdesc.size = RLCD_BUF_SIZE;
 
     vTaskDelay(50 / portTICK_PERIOD_MS);    // wait for voltage to stabilize (what voltage??)
 
-    // i2s_parallel_setup( &I2S1, &cfg );
-    i2s_parallel_setup( &I2S1, cfg );
+    i2s_parallel_setup( &I2S1, &cfg );
+    // i2s_parallel_setup( &I2S1, cfg );
 
     vTaskDelay(50 / portTICK_PERIOD_MS);
 
     ESP_LOGI( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
-                    cfg->tx_right_first, cfg->rx_right_first, cfg->tx_msb_right, cfg->rx_msb_right, cfg->tx_chan_mod, cfg->rx_chan_mod );
+                    cfg.tx_right_first, cfg.rx_right_first, cfg.tx_msb_right, cfg.rx_msb_right, cfg.tx_chan_mod, cfg.rx_chan_mod );
+
+    // ESP_LOGI( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
+    //                 cfg->tx_right_first, cfg->rx_right_first, cfg->tx_msb_right, cfg->rx_msb_right, cfg->tx_chan_mod, cfg->rx_chan_mod );
 
     // gpio_set_level( RLCD_INTB, 1 );
 
