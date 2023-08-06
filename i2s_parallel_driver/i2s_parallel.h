@@ -50,7 +50,11 @@ typedef struct {
 void i2s_stop( i2s_dev_t* dev );
 
 void i2s_parallel_setup(i2s_dev_t* dev, const i2s_parallel_config_t* cfg);
-void i2s_send_buf( i2s_dev_t* dev );
+
+void i2s_prepareTx( i2s_dev_t *dev );
+void i2s_startTx( i2s_dev_t *dev );
+// void i2s_send_buf( i2s_dev_t* dev );
+
 // void i2s_send_buf( i2s_dev_t *dev, i2s_parallel_buffer_desc_t* data_buf );
 // void i2s_setStopSignal( bool state );
 void i2s_setStopSignal( void );

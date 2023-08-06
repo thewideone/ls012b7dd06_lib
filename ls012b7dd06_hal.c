@@ -8,6 +8,11 @@
 
 #include "esp_log.h"
 
+#include "driver/rmt_tx.h"
+#include "rmt/rlcd_gck_encoder.h"
+#include "rmt/rlcd_gsp_encoder.h"
+#include "rmt/rlcd_intb_encoder.h"
+
 #include "i2s_parallel_driver/i2s_parallel.h"
 
 uint8_t rlcd_buf[RLCD_BUF_SIZE] = { //[RLCD_BUF_SIZE] = {
@@ -220,8 +225,144 @@ void rlcd_testGPIOs( uint8_t pins_state ){
 
 i2s_parallel_buffer_desc_t bufdesc;
 
+
+rmt_channel_handle_t rmt_ch_array[3] = {NULL};
+
+// rmt_channel_handle_t rmt_gck_channel = NULL;
+rmt_encoder_handle_t rlcd_gck_encoder_handle = NULL;
+rmt_encoder_handle_t rlcd_gsp_encoder_handle = NULL;
+rmt_encoder_handle_t rlcd_intb_encoder_handle = NULL;
+
+// All bits are '1's except of the first and the last one.
+// This should give total of 62 periods of BCK (that is binary '1's),
+// that is 2 dummy periods and 60 for RGB data.
+// The first and the last bit can be used for time adjustment of
+// the whole BCK signal.
+const rlcd_gck_scan_code_t gck_payload = {
+    // .data = 0xFFFFFFFFFFFFFFFF
+    // .data = 0xFFFFFFFF
+    .data = { [ 0 ... 29 ] = 0b01111111 }
+    // .data = 0x7FFFFFFFFFFFFFFE
+    // .data = 0x7FFFFE
+};
+
+const rlcd_gsp_scan_code_t gsp_payload = {
+    .data = 0b00000010
+};
+
+const rlcd_intb_scan_code_t intb_payload = {
+    .data = 0b00000010
+};
+
+rmt_transmit_config_t transmit_config_common;
+
+void rlcd_rmt_installEncoderGCK( rmt_channel_handle_t* rmt_ch_array ){
+    ESP_LOGI(TAG, "Creating RMT TX channel for GCK: frequency = %dHz, mem_block_symbols = %d and trans_queue_depth = %d ...",
+                  RLCD_GCK_FREQ, 64, 8 );
+    rmt_tx_channel_config_t tx_channel_cfg = {
+        .clk_src = RMT_CLK_SRC_DEFAULT, //RMT_CLK_SRC_REF_TICK,    // 1MHz clock source //RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = RLCD_GCK_FREQ,   // in Hz
+        .mem_block_symbols = 64, // amount of RMT symbols that the channel can store at a time
+        .trans_queue_depth = 8,  // number of transactions that allowed to pending in the background, this example won't queue multiple transactions, so queue depth > 1 is sufficient
+        .gpio_num = RLCD_GCK,
+    };
+    // ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &rmt_gck_channel));
+    ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &rmt_ch_array[0]));
+
+    ESP_LOGI(TAG, "Setting modulate carrier to TX channel for GCK: duty_cycle = %f, frequency_hz = %dHz...",
+                  (float)0.5, 0);
+    rmt_carrier_config_t carrier_cfg = {
+        .duty_cycle = 0.5,
+        .frequency_hz = 0,  // no carrier frequency for digital transmittion
+    };
+    // ESP_ERROR_CHECK(rmt_apply_carrier(rmt_gck_channel, &carrier_cfg));
+    ESP_ERROR_CHECK(rmt_apply_carrier(rmt_ch_array[0], &carrier_cfg));
+
+    ESP_LOGI(TAG, "Installing encoder for GCK: resolution = %d...", RLCD_GCK_FREQ );
+    rlcd_gck_encoder_config_t rlcd_gck_encoder_cfg = {
+        .resolution = RLCD_GCK_FREQ,
+    };
+    ESP_ERROR_CHECK(rmt_new_rlcd_gck_encoder(&rlcd_gck_encoder_cfg, &rlcd_gck_encoder_handle));
+
+    ESP_LOGI(TAG, "Enabling RMT TX channel for GCK...");
+    // ESP_ERROR_CHECK(rmt_enable(rmt_gck_channel));
+    ESP_ERROR_CHECK(rmt_enable(rmt_ch_array[0]));
+
+    ESP_LOGI(TAG, "Done. RMT encoder for GCK successufully installed." );
+}
+
+void rlcd_rmt_installEncoderGSP( rmt_channel_handle_t* rmt_ch_array ){
+    ESP_LOGI(TAG, "Creating RMT TX channel for GSP: frequency = %dHz, mem_block_symbols = %d and trans_queue_depth = %d ...",
+                  RLCD_GSP_FREQ, 64, 8 );
+    rmt_tx_channel_config_t tx_channel_cfg = {
+        .clk_src = RMT_CLK_SRC_DEFAULT, //RMT_CLK_SRC_REF_TICK,    // 1MHz clock source //RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = RLCD_GSP_FREQ,   // in Hz
+        .mem_block_symbols = 64, // amount of RMT symbols that the channel can store at a time
+        .trans_queue_depth = 8,  // number of transactions that allowed to pending in the background, this example won't queue multiple transactions, so queue depth > 1 is sufficient
+        .gpio_num = RLCD_GSP,
+    };
+    // ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &rmt_gsp_channel));
+    ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &rmt_ch_array[1]));
+
+    ESP_LOGI(TAG, "Setting modulate carrier to TX channel for GSP: duty_cycle = %f, frequency_hz = %dHz...",
+                  (float)0.5, 0);
+    rmt_carrier_config_t carrier_cfg = {
+        .duty_cycle = 0.5,
+        .frequency_hz = 0,  // no carrier frequency for digital transmittion
+    };
+    // ESP_ERROR_CHECK(rmt_apply_carrier(rmt_gsp_channel, &carrier_cfg));
+    ESP_ERROR_CHECK(rmt_apply_carrier(rmt_ch_array[1], &carrier_cfg));
+
+    ESP_LOGI(TAG, "Installing encoder for GSP: resolution = %d...", RLCD_GSP_FREQ );
+    rlcd_gsp_encoder_config_t rlcd_gsp_encoder_cfg = {
+        .resolution = RLCD_GSP_FREQ,
+    };
+    ESP_ERROR_CHECK(rmt_new_rlcd_gsp_encoder(&rlcd_gsp_encoder_cfg, &rlcd_gsp_encoder_handle));
+
+    ESP_LOGI(TAG, "Enabling RMT TX channel for GSP...");
+    // ESP_ERROR_CHECK(rmt_enable(rmt_gsp_channel));
+    ESP_ERROR_CHECK(rmt_enable(rmt_ch_array[1]));
+
+    ESP_LOGI(TAG, "Done. RMT encoder for GSP successufully installed." );
+}
+
+void rlcd_rmt_installEncoderINTB( rmt_channel_handle_t* rmt_ch_array ){
+    ESP_LOGI(TAG, "Creating RMT TX channel for INTB: frequency = %dHz, mem_block_symbols = %d and trans_queue_depth = %d ...",
+                  RLCD_INTB_FREQ, 64, 8 );
+    rmt_tx_channel_config_t tx_channel_cfg = {
+        .clk_src = RMT_CLK_SRC_DEFAULT, //RMT_CLK_SRC_REF_TICK,    // 1MHz clock source //RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = RLCD_INTB_FREQ,   // in Hz
+        .mem_block_symbols = 64, // amount of RMT symbols that the channel can store at a time
+        .trans_queue_depth = 8,  // number of transactions that allowed to pending in the background, this example won't queue multiple transactions, so queue depth > 1 is sufficient
+        .gpio_num = RLCD_INTB,
+    };
+    // ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &rmt_intb_channel));
+    ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &rmt_ch_array[2]));
+
+    ESP_LOGI(TAG, "Setting modulate carrier to TX channel for INTB: duty_cycle = %f, frequency_hz = %dHz...",
+                  (float)0.5, 0);
+    rmt_carrier_config_t carrier_cfg = {
+        .duty_cycle = 0.5,
+        .frequency_hz = 0,  // no carrier frequency for digital transmittion
+    };
+    // ESP_ERROR_CHECK(rmt_apply_carrier(rmt_intb_channel, &carrier_cfg));
+    ESP_ERROR_CHECK(rmt_apply_carrier(rmt_ch_array[2], &carrier_cfg));
+
+    ESP_LOGI(TAG, "Installing encoder for INTB: resolution = %d...", RLCD_INTB_FREQ );
+    rlcd_intb_encoder_config_t rlcd_intb_encoder_cfg = {
+        .resolution = RLCD_INTB_FREQ,
+    };
+    ESP_ERROR_CHECK(rmt_new_rlcd_intb_encoder(&rlcd_intb_encoder_cfg, &rlcd_intb_encoder_handle));
+
+    ESP_LOGI(TAG, "Enabling RMT TX channel for INTB...");
+    // ESP_ERROR_CHECK(rmt_enable(rmt_intb_channel));
+    ESP_ERROR_CHECK(rmt_enable(rmt_ch_array[2]));
+
+    ESP_LOGI(TAG, "Done. RMT encoder for INTB successufully installed." );
+}
+
+
 void rlcd_init( void ){
-// void rlcd_init( i2s_parallel_config_t* cfg ){
     rlcd_setupPins();
     rlcd_setAllGPIOs( 0 );
 
@@ -355,7 +496,7 @@ void rlcd_init( void ){
         rlcd_buf[2*i] = (1<<3);
     }
 
-
+    /*
 
     // for( uint16_t i=0; i < LINE_WIDTH; i++ ){
     //     rlcd_buf[i] = (1<<0);
@@ -408,6 +549,7 @@ void rlcd_init( void ){
     //     .clock_speed_hz = 2*1000*1000,  // pixel clock frequency
     //     .buf = &bufdesc                 // image buffer
     // };
+    */
 
     i2s_parallel_config_t cfg = {
         .gpio_bus = {
@@ -417,20 +559,13 @@ void rlcd_init( void ){
             RLCD_G1, 	// 3 : d3
             RLCD_B0, 	// 4 : d4
             RLCD_B1, 	// 5 : d5
-            RLCD_BSP,	// 6 : d6 (HS?)
-            RLCD_GEN	// 7 : d7 (VS?)
+            RLCD_BSP,	// 6 : d6
+            RLCD_GEN	// 7 : d7
         },
         .gpio_clk = RLCD_BCK,
 
-		// .tx_right_first = 1,
-		// .rx_right_first = 1,
-		// .tx_msb_right = 0,
-		// .rx_msb_right = 0,
-		// .tx_chan_mod = 1,
-		// .rx_chan_mod = 1,
-
         .bits = I2S_PARALLEL_BITS_8,    // 8-bit mode (8 parallel output lines)
-        .clock_speed_hz = 2*2*1250000,  // 5MHz pixel clock frequency
+        .clock_speed_hz = 2*1250000,  // 5MHz pixel clock frequency
         .buf = &bufdesc                 // image buffer
     };
 
@@ -449,8 +584,10 @@ void rlcd_init( void ){
     ESP_LOGI( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
                     cfg.tx_right_first, cfg.rx_right_first, cfg.tx_msb_right, cfg.rx_msb_right, cfg.tx_chan_mod, cfg.rx_chan_mod );
 
-    // ESP_LOGI( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
-    //                 cfg->tx_right_first, cfg->rx_right_first, cfg->tx_msb_right, cfg->rx_msb_right, cfg->tx_chan_mod, cfg->rx_chan_mod );
+    // ESP_LOGI( TAG, "Installing RMT encoder for BCK signal..." );
+    rlcd_rmt_installEncoderGCK( rmt_ch_array );
+    rlcd_rmt_installEncoderGSP( rmt_ch_array );
+    rlcd_rmt_installEncoderINTB( rmt_ch_array );
 
     // gpio_set_level( RLCD_INTB, 1 );
 
@@ -498,9 +635,20 @@ void rlcd_init( void ){
 }
 
 void testTransmit( void ){
+    
+    i2s_prepareTx( &I2S1 );
+
+    ESP_ERROR_CHECK( rmt_transmit( rmt_ch_array[2], rlcd_intb_encoder_handle, &intb_payload, sizeof(intb_payload), &transmit_config_common ) );
+    ESP_ERROR_CHECK( rmt_transmit( rmt_ch_array[1], rlcd_gsp_encoder_handle, &gsp_payload, sizeof(gsp_payload), &transmit_config_common ) );
+    ESP_ERROR_CHECK( rmt_transmit( rmt_ch_array[0], rlcd_gck_encoder_handle, &gck_payload, sizeof(gck_payload), &transmit_config_common ) );
     // i2s_setStopSignal();    // has to be before i2s_send_buf(), because I2S's ISR gets called earlier than any function called here I guess
     // i2s_send_buf( &I2S1, &bufdesc );
-    i2s_send_buf( &I2S1 );
+
+    ets_delay_us( 64 );
+
+    i2s_startTx( &I2S1 );
+    // i2s_send_buf( &I2S1 );
+
     // i2s_setStopSignal();
     
     // ets_delay_us( 30 );

@@ -30,7 +30,7 @@ typedef union {
 // Display width
 #define RLCD_DISP_W 240
 // Display height
-#define RLCD_DISP_H 2
+#define RLCD_DISP_H 240
 
 // Display colour depth (in bits per channel).
 // Add a possibility to make it 1 or monochrome?
@@ -55,10 +55,6 @@ typedef union {
 
 // #define RLCD_BCK_FREQ 5000000
 
-#define RGB_CLK_LEADING_DUMMY_PERIOD_CNT 2
-// 35 periods are for 14us of GEN signaling
-#define RGB_CLK_TRAILING_DUMMY_PERIOD_CNT ( RGB_CLK_LEADING_DUMMY_PERIOD_CNT + 36 )
-
 // thwGEN defined by the number of pixels
 // that would be equivalently transmitted in that time.
 // 
@@ -69,8 +65,13 @@ typedef union {
 // thhGCK defined by the number of pixels
 // that would be equivalently transmitted in that time.
 // 
-// thhGCK = 4us
-// thhGCK / ( tsRGB + thRGB ) = 4us / 400ns = 10
-#define THHGCK_LEN 10
+// thhGCK = 4.8us
+// thhGCK / ( tsRGB + thRGB ) = 4.8us / 400ns = 12
+#define THHGCK_LEN 12
+
+#define RGB_CLK_LEADING_DUMMY_PERIOD_CNT 2
+// 35 periods are for 14us of GEN signaling
+#define RGB_CLK_TRAILING_DUMMY_PERIOD_CNT ( THWGEN_LEN + THHGCK_LEN + 1)//( RGB_CLK_LEADING_DUMMY_PERIOD_CNT + 33 )
+
 
 #endif // _RLCD_CONFIG_H_

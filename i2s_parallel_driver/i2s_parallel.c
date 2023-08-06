@@ -16,6 +16,9 @@
 
 #include "driver/gpio.h"    // for testing purposes
 
+#include "freertos/FreeRTOS.h"  // for vTaskDelay()
+#include "freertos/task.h"      //
+
 // For APLL clock
 #include "soc/rtc_cntl_reg.h"
 #include "soc/rtc.h"
@@ -28,7 +31,8 @@
 
 // #include "../ls012b7dd06.h"
 
-#define OUT_DATA_BUF_LINE_W ( RLCD_DISP_W + RGB_CLK_LEADING_DUMMY_PERIOD_CNT + RGB_CLK_TRAILING_DUMMY_PERIOD_CNT )
+// #define OUT_DATA_BUF_LINE_W ( RLCD_DISP_W + RGB_CLK_LEADING_DUMMY_PERIOD_CNT + RGB_CLK_TRAILING_DUMMY_PERIOD_CNT )
+#define OUT_DATA_BUF_LINE_W ( RLCD_DISP_W/2 + RGB_CLK_LEADING_DUMMY_PERIOD_CNT + RGB_CLK_TRAILING_DUMMY_PERIOD_CNT )
 #define OUT_DATA_BUF_SIZE ( RLCD_DISP_H*2 * OUT_DATA_BUF_LINE_W )
 
 #define TAG "i2s_parallel"
@@ -40,14 +44,14 @@ typedef struct {
     // Array of DMA buffer descriptors, not buffers!
     volatile lldesc_t* dma_desc_array;
     // Number of DMA descriptors in dma_desc_array.
-    int dma_desc_count;
+    uint16_t dma_desc_count;
 } i2s_parallel_state_t;
 
 static i2s_parallel_state_t* i2s_state[2] = {NULL, NULL};
 
 // Stores the index of currently active
 // (that has just been sent) DMA descriptor.
-int active_dma_desc_idx = 0;
+uint16_t active_dma_desc_idx = 0;
 
 // I2S interrupt handle
 intr_handle_t i2s_intr_handle = NULL;
@@ -359,7 +363,7 @@ static void init_dma_desc_array(volatile lldesc_t* dma_desc_array, i2s_parallel_
 // desc_count       - size of th array above
 // 
 static void dma_InitEmptyDescArray(volatile lldesc_t* dma_desc_array, uint16_t desc_count ) {
-    for( uint8_t i = 0; i < desc_count; i++ ){
+    for( uint16_t i = 0; i < desc_count; i++ ){
 
         dma_desc_array[i].length = OUT_DATA_BUF_LINE_W;
 		dma_desc_array[i].size = dma_desc_array[i].length;
@@ -369,7 +373,7 @@ static void dma_InitEmptyDescArray(volatile lldesc_t* dma_desc_array, uint16_t d
             dma_desc_array[i].sosf = 1;
             dma_desc_array[i].qe.stqe_next = NULL;
         }
-        else{
+        else {
             dma_desc_array[i].sosf = 0;
             dma_desc_array[ i-1 ].qe.stqe_next = (lldesc_t*) &(dma_desc_array[i]);
         }
@@ -411,6 +415,7 @@ void dma_AllocateDescs( i2s_dev_t* dev ){
     // // Make a ring of empty DMA descriptors.
     dma_InitEmptyDescArray( st->dma_desc_array, st->dma_desc_count );
 
+    /*
     for( uint16_t i=0; i < st->dma_desc_count; i++ ){
         ESP_LOGD( TAG, "dma_AllocateDescs(): Descriptor no. %d at %p initialized with:", i, &(st->dma_desc_array[i]) );
         ESP_LOGD( TAG, "dma_AllocateDescs(): \tlength = %d", st->dma_desc_array[i].length );
@@ -422,6 +427,7 @@ void dma_AllocateDescs( i2s_dev_t* dev ){
         ESP_LOGD( TAG, "dma_AllocateDescs(): \tbuf = %p", st->dma_desc_array[i].buf );
         ESP_LOGD( TAG, "dma_AllocateDescs(): \tnext = %p", st->dma_desc_array[i].qe.stqe_next );
     }
+    */
     
     // st->dma_desc_array[ st->dma_desc_count - 1 ].qe.stqe_next = &(st->dma_desc_array[0]);
 
@@ -438,23 +444,27 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
 
     ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Preparing output data buffer: size = %d, line width = %d...", OUT_DATA_BUF_SIZE, OUT_DATA_BUF_LINE_W );
     
+    vTaskDelay( 30 / portTICK_PERIOD_MS );
+
     // For each image line
-    for( uint8_t line_no = 0; line_no < RLCD_DISP_H; line_no++ ){
+    for( uint16_t line_no = 0; line_no < RLCD_DISP_H; line_no++ ){
+
+        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Prep. line %d...", line_no );
 
         // Fill with MSB:
 
         // Start of the whole MSB of image line data
-        uint16_t out_buf_line_start_idx = line_no*2 * OUT_DATA_BUF_LINE_W;
+        uint32_t out_buf_line_start_idx = line_no*2 * OUT_DATA_BUF_LINE_W;
         // End of MSB of image line data
-        uint16_t out_buf_line_end_idx = out_buf_line_start_idx + OUT_DATA_BUF_LINE_W - 1;
+        uint32_t out_buf_line_end_idx = out_buf_line_start_idx + OUT_DATA_BUF_LINE_W - 1;
 
         // Start of the pixel colour data in MSB of image line data
-        uint16_t out_buf_line_rgb_start = out_buf_line_start_idx + RGB_CLK_LEADING_DUMMY_PERIOD_CNT;
+        uint32_t out_buf_line_rgb_start = out_buf_line_start_idx + RGB_CLK_LEADING_DUMMY_PERIOD_CNT;
         // End of the pixel colour data in MSB of image line data
-        uint16_t out_buf_line_rgb_end = out_buf_line_end_idx - RGB_CLK_TRAILING_DUMMY_PERIOD_CNT;
+        uint32_t out_buf_line_rgb_end = out_buf_line_end_idx - RGB_CLK_TRAILING_DUMMY_PERIOD_CNT;
 
-        ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tFilling MSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
-                  line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
+        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tFilling MSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
 
         // Encode BSP control signal
         // out_data_buf[ out_buf_line_start_idx ] = ( 1 << GPIO_BUS_BSP_BIT ); // 1st parallel data byte
@@ -475,7 +485,7 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         
         // out_data_buf[ out_buf_line_rgb_start ] = buffer_desc->memory[ line_no ];
 
-        for( uint16_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
+        for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
             out_data_buf[ i ] |= 0x01;
             out_data_buf[ i+1 ] |= 0x02;
             out_data_buf[ i+2 ] |= 0x04;
@@ -490,8 +500,8 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         out_buf_line_rgb_start = out_buf_line_start_idx + RGB_CLK_LEADING_DUMMY_PERIOD_CNT;
         out_buf_line_rgb_end = out_buf_line_end_idx - RGB_CLK_TRAILING_DUMMY_PERIOD_CNT;
 
-        ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tFilling LSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
-                  line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
+        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tFilling LSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
         
         // Encode BSP control signal
         for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
@@ -510,7 +520,7 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
 
         // Fill the buffer with LSB of pixel data in current line
 
-        for( uint16_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
+        for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
             out_data_buf[ i ] |= 0x01;
             out_data_buf[ i+1 ] |= 0x02;
             out_data_buf[ i+2 ] |= 0x04;
@@ -518,25 +528,34 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         }
     }
 
+    ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Swapping byte pairs..." );
+
     // Swap byte pairs, because of transmission order from I2S's FIFO
-    for( uint16_t i = 0; i < OUT_DATA_BUF_SIZE; i += 4 ){
-        uint8_t temp1 = out_data_buf[i];
-        uint8_t temp2 = out_data_buf[i+1];
+    uint8_t temp1, temp2;
+    for( uint32_t i = 0; i < OUT_DATA_BUF_SIZE; i += 4 ){
+        temp1 = out_data_buf[i];
+        temp2 = out_data_buf[i+1];
 
         out_data_buf[i] = out_data_buf[i+2];
         out_data_buf[i+1] = out_data_buf[i+3];
 
         out_data_buf[i+2] = temp1;
         out_data_buf[i+3] = temp2;
+
+        // if( i % 500 == 0 ){
+        //     ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Pair %ld...", i );
+        //     vTaskDelay( 20 / portTICK_PERIOD_MS );
+        // }
     }
 
     ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Filling %d descriptors with image data...", st->dma_desc_count );
     // For each DMA descriptor (there are 2*OUT_DATA_BUF_LINE_W descriptors)
-    for( uint8_t i = 0; i < st->dma_desc_count; i++ ){
+    for( uint16_t i = 0; i < st->dma_desc_count; i++ ){
         // For now:
         // Set the starting position in the image buffer.
         // st->dma_desc_array[i].buf = buffer_desc->memory + ( i * OUT_DATA_BUF_LINE_W );
-        ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tDescriptor %d: start = out_data_buf + %d.", i, ( i * OUT_DATA_BUF_LINE_W ) );
+
+        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tDescriptor %d: start = out_data_buf + %d.", i, ( i * OUT_DATA_BUF_LINE_W ) );
         st->dma_desc_array[i].buf = out_data_buf + ( i * OUT_DATA_BUF_LINE_W );
     }
 
@@ -665,8 +684,8 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Rebooting APLL clock..." );
     
     // Configure APLL clock
-    RTCCNTL.ana_conf.plla_force_pd = 0; // Power down APLL
-    RTCCNTL.ana_conf.plla_force_pu = 1; // Power up APLL
+    // RTCCNTL.ana_conf.plla_force_pd = 0; // Power down APLL
+    // RTCCNTL.ana_conf.plla_force_pu = 1; // Power up APLL
     
     // From esp-idf/components/esp_hw_support/port/esp32/rtc_clk.c/rtc_clk_apll_coeff_calc() we get:
     // apll_freq = xtal_freq * (4 + sdm2 + sdm1/256 + sdm0/65536) / ((o_div + 2) * 2)
@@ -684,7 +703,7 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Calculating APLL coefficients for frequency %luHz...", expected_apll_freq );
 
     // Try to calculate APLL formula coefficients and, if succeeded, apply them.
-    if( rtc_clk_apll_coeff_calc( expected_apll_freq, &o_div, &sdm0, &sdm1, &sdm2) ){
+    if( 1 == 0 && rtc_clk_apll_coeff_calc( expected_apll_freq, &o_div, &sdm0, &sdm1, &sdm2) ){
         ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: APLL coefficients found: o_div = %lu, sdm0 = %lu, sdm1 = %lu, sdm2 = %lu.",
                         o_div, sdm0, sdm1, sdm2 );
 
@@ -857,7 +876,8 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
 // 
 // Send data buffer over I2S.
 // 
-void i2s_send_buf( i2s_dev_t *dev ){ //, i2s_parallel_buffer_desc_t* data_buf ) {
+void i2s_prepareTx( i2s_dev_t *dev ){
+// void i2s_send_buf( i2s_dev_t *dev ){
     
     ESP_ERROR_CHECK( esp_intr_disable( i2s_intr_handle ) );
     i2s_reset( dev );
@@ -904,6 +924,11 @@ void i2s_send_buf( i2s_dev_t *dev ){ //, i2s_parallel_buffer_desc_t* data_buf ) 
 
     ESP_ERROR_CHECK( esp_intr_enable( i2s_intr_handle ) );
 
+    // // Start transmission
+    // dev->conf.tx_start = 1;
+}
+
+void i2s_startTx( i2s_dev_t *dev ){
     // Start transmission
     dev->conf.tx_start = 1;
 }

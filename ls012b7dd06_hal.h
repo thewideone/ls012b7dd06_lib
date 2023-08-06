@@ -74,9 +74,9 @@
 #define tlsGSP 10
 
 // GCK width high level [us]
-#define thwGCK 63
+#define thwGCK 64
 // GCK width low level [us]
-#define tlwGCK 63
+#define tlwGCK 64
 // GCK hold time high level [us]
 #define thhGCK 4
 // GCK setup time low level [us]
@@ -94,6 +94,15 @@
 
 #define RLCD_BCK_FREQ ( 1000000000/thwBCK )   // 2.5MHz
 #define RLCD_RGB_FREQ ( 1000000000/thRGB  )   // 5MHz
+
+// It seems that transmission of one MSB or LSB of a single video line
+// via I2S takes 63.625us.
+// Resolution of GCK should be then 0.125us, that is 8MHz.
+#define RLCD_GCK_FREQ 8000000   //( 1000000/thwGCK * 32 )   // 15.625kHz
+
+#define RLCD_GSP_FREQ RLCD_GCK_FREQ
+
+#define RLCD_INTB_FREQ 400000   // 0.4MHz, 2.5us resolution
 
 #include "i2s_parallel_driver/i2s_parallel.h"
 // // Extern here used for temporary config tests
