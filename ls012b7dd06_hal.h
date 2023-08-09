@@ -16,37 +16,37 @@
 // To use some of them, gpio_reset(pin_number) has to be called first.
 
 // Start signal for Gate-Driver
-#define RLCD_GSP    GPIO_NUM_20
+#define RLCD_GSP    GPIO_NUM_0  //GPIO_NUM_20
 // Clock signal for Gate-Driver
-#define RLCD_GCK    GPIO_NUM_21
+#define RLCD_GCK    GPIO_NUM_2  //GPIO_NUM_21
 // Gate enable signal
-#define RLCD_GEN    GPIO_NUM_25
+#define RLCD_GEN    GPIO_NUM_26 //GPIO_NUM_25
 // Initial signal for Binary/Gate-Driver
-#define RLCD_INTB   GPIO_NUM_26
+#define RLCD_INTB   GPIO_NUM_25 //GPIO_NUM_26
 
 // Power pins (square wave signal)
 // VB is the same as VCOM so they can be shorted (I hope)
 // Black signal voltage of LCD
-#define RLCD_VB_VCOM     GPIO_NUM_32
+#define RLCD_VB_VCOM    GPIO_NUM_27 //GPIO_NUM_4  //GPIO_NUM_32
 // White signal voltage of LCD
-#define RLCD_VA     GPIO_NUM_33
+#define RLCD_VA         GPIO_NUM_20 //GPIO_NUM_0  //GPIO_NUM_33
 
 // Start signal for the Binary-Driver
-#define RLCD_BSP    GPIO_NUM_27
+#define RLCD_BSP    GPIO_NUM_4  //GPIO_NUM_27
 // Clock signal driving of Binary-Driver
-#define RLCD_BCK    GPIO_NUM_14
+#define RLCD_BCK    GPIO_NUM_21 //GPIO_NUM_2  //GPIO_NUM_14
 // Red signal for odd Pixels
 #define RLCD_R0     GPIO_NUM_12
 // Red signal for even Pixels
 #define RLCD_R1     GPIO_NUM_13
 // Green signal for odd Pixels
-#define RLCD_G0     GPIO_NUM_15
+#define RLCD_G0     GPIO_NUM_14 //GPIO_NUM_15
 // Green signal for even Pixels
-#define RLCD_G1     GPIO_NUM_2
+#define RLCD_G1     GPIO_NUM_15 //GPIO_NUM_2
 // Blue signal for odd Pixels
-#define RLCD_B0     GPIO_NUM_4
+#define RLCD_B0     GPIO_NUM_32 //GPIO_NUM_4
 // Blue signal for even Pixels
-#define RLCD_B1     GPIO_NUM_0
+#define RLCD_B1     GPIO_NUM_33 //GPIO_NUM_0
 
 // 35, 34, 37, 38 input only
 

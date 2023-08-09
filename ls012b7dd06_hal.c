@@ -34,15 +34,30 @@ void rlcd_setupPins( void ){
     // Setup GPIO pins
 
     // Additional for testing
-    gpio_reset_pin(GPIO_NUM_20);
-    gpio_set_direction(GPIO_NUM_20, GPIO_MODE_OUTPUT);
+    // gpio_reset_pin(GPIO_NUM_20);
+    // gpio_set_direction(GPIO_NUM_20, GPIO_MODE_OUTPUT);
 
     // The following 4 are used for JTAG debugging by default
+    gpio_reset_pin(RLCD_GSP);
+    gpio_reset_pin(RLCD_GCK);
+    gpio_reset_pin(RLCD_GEN);
+    gpio_reset_pin(RLCD_INTB);
+    gpio_reset_pin(RLCD_VB_VCOM);
+    gpio_reset_pin(RLCD_VA);
+    gpio_reset_pin(RLCD_BSP);
     gpio_reset_pin(RLCD_BCK);
+
     gpio_reset_pin(RLCD_R0);
     gpio_reset_pin(RLCD_R1);
     gpio_reset_pin(RLCD_G0);
 
+    gpio_pullup_dis(RLCD_GSP);
+    gpio_pullup_dis(RLCD_GCK);
+    gpio_pullup_dis(RLCD_GEN);
+    gpio_pullup_dis(RLCD_INTB);
+    gpio_pullup_dis(RLCD_VB_VCOM);
+    gpio_pullup_dis(RLCD_VA);
+    gpio_pullup_dis(RLCD_BSP);
     gpio_pullup_dis(RLCD_BCK);
 
     gpio_set_direction(RLCD_GSP, GPIO_MODE_OUTPUT);
@@ -823,7 +838,7 @@ void rlcd_resume( void ){
     // and wait for them to settle.
 
     // Wait for 2 GCK cycles after VDDs went HIGH
-    ets_delay_us( 267 );    //tlwGCK*2 + thwGCK*2 );
+    // ets_delay_us( 267 );    //tlwGCK*2 + thwGCK*2 );
 
     // Pixel memory init: write all screen black.
     // rlcd_fillBlack();
@@ -837,7 +852,7 @@ void rlcd_resume( void ){
     vTaskDelay( 40 / portTICK_PERIOD_MS );
 
     // Wait >=30us for VCOM, VA and VB
-    ets_delay_us( 30 );
+    // ets_delay_us( 30 );
 
     // Start VCOM, VA and VB
 
@@ -865,7 +880,7 @@ void rlcd_suspend( void ){
     pwm_disable();
 
     // Wait >=30us for VCOM, VA and VB
-    ets_delay_us( 30 );
+    // ets_delay_us( 30 );
 
     // Turn off voltage regulators
 
