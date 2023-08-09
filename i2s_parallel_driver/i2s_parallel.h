@@ -51,6 +51,10 @@ void i2s_stop( i2s_dev_t* dev );
 
 void i2s_parallel_setup(i2s_dev_t* dev, const i2s_parallel_config_t* cfg);
 
+void outDataBuf_clearImage( void );
+void outDataBuf_update( void );
+// void i2s_updateOutputBuf( i2s_dev_t *dev, bool all_black );
+
 void i2s_prepareTx( i2s_dev_t *dev );
 void i2s_startTx( i2s_dev_t *dev );
 // void i2s_send_buf( i2s_dev_t* dev );

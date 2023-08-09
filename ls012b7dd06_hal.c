@@ -15,6 +15,10 @@
 
 #include "i2s_parallel_driver/i2s_parallel.h"
 
+// #include "driver/ledc.h"        // for VCOM, VA and VB signals
+// #include "driver/mcpwm.h"       // for VCOM, VA and VB signals
+#include "driver/mcpwm_prelude.h"   // for VCOM, VA and VB signals
+
 uint8_t rlcd_buf[RLCD_BUF_SIZE] = { //[RLCD_BUF_SIZE] = {
     0xff
     //0x00, 0x00, // 2 dummy bits (clock edges) in front
@@ -225,6 +229,7 @@ void rlcd_testGPIOs( uint8_t pins_state ){
 
 i2s_parallel_buffer_desc_t bufdesc;
 
+// RMT stuff
 
 rmt_channel_handle_t rmt_ch_array[3] = {NULL};
 
@@ -239,21 +244,14 @@ rmt_encoder_handle_t rlcd_intb_encoder_handle = NULL;
 // The first and the last bit can be used for time adjustment of
 // the whole BCK signal.
 const rlcd_gck_scan_code_t gck_payload = {
-    // .data = 0xFFFFFFFFFFFFFFFF
-    // .data = 0xFFFFFFFF
     .data = { [ 0 ... 29 ] = 0b01111111 }
-    // .data = 0x7FFFFFFFFFFFFFFE
-    // .data = 0x7FFFFE
 };
-
 const rlcd_gsp_scan_code_t gsp_payload = {
     .data = 0b00000010
 };
-
 const rlcd_intb_scan_code_t intb_payload = {
     .data = 0b00000010
 };
-
 rmt_transmit_config_t transmit_config_common;
 
 void rlcd_rmt_installEncoderGCK( rmt_channel_handle_t* rmt_ch_array ){
@@ -361,6 +359,517 @@ void rlcd_rmt_installEncoderINTB( rmt_channel_handle_t* rmt_ch_array ){
     ESP_LOGI(TAG, "Done. RMT encoder for INTB successufully installed." );
 }
 
+/* LEDC stuff
+bool va_is_enabled = false;
+
+ledc_channel_config_t ledc_ch_va = {
+    .speed_mode     = LEDC_MODE,
+    .channel        = LEDC_CHANNEL_0,
+    .timer_sel      = LEDC_TIMER,
+    .intr_type      = LEDC_INTR_DISABLE,
+    .gpio_num       = RLCD_VA,
+    .duty           = 0, // Set duty to 0%
+    .hpoint         = 0,
+    .flags.output_invert = 0
+};
+
+ledc_channel_config_t ledc_ch_vb = {
+    .speed_mode     = LEDC_MODE,
+    .channel        = LEDC_CHANNEL_1,
+    .timer_sel      = LEDC_TIMER,
+    .intr_type      = LEDC_INTR_DISABLE,
+    .gpio_num       = RLCD_VB_VCOM,
+    .duty           = 0, // Set duty to 0%
+    .hpoint         = 0,
+    .flags.output_invert = 0
+};
+
+static void ledc_init( void ){
+    // Prepare and then apply the LEDC PWM timer configuration
+    ledc_timer_config_t ledc_timer_va = {
+        .speed_mode       = LEDC_MODE,
+        .timer_num        = LEDC_TIMER_0,
+        .duty_resolution  = LEDC_DUTY_RES,
+        .freq_hz          = LEDC_FREQUENCY,  // Set output frequency at 5 kHz
+        .clk_cfg          = LEDC_AUTO_CLK
+    };
+    ESP_ERROR_CHECK( ledc_timer_config( &ledc_timer_va ) );
+
+    ledc_timer_config_t ledc_timer_vb = {
+        .speed_mode       = LEDC_MODE,
+        .timer_num        = LEDC_TIMER_1,
+        .duty_resolution  = LEDC_DUTY_RES,
+        .freq_hz          = LEDC_FREQUENCY,  // Set output frequency at 5 kHz
+        .clk_cfg          = LEDC_AUTO_CLK
+    };
+    ESP_ERROR_CHECK( ledc_timer_config( &ledc_timer_vb ) );
+
+    // Prepare and then apply the LEDC PWM channel configuration
+    // ledc_channel_config_t ledc_ch_va = {
+    //     .speed_mode     = LEDC_MODE,
+    //     .channel        = LEDC_CHANNEL,
+    //     .timer_sel      = LEDC_TIMER,
+    //     .intr_type      = LEDC_INTR_DISABLE,
+    //     .gpio_num       = LEDC_OUTPUT_IO,
+    //     .duty           = 0, // Set duty to 0%
+    //     .hpoint         = 0,
+    //     .flags.output_invert = 0
+    // };
+    ESP_ERROR_CHECK( ledc_channel_config( &ledc_ch_va ) );
+    ESP_ERROR_CHECK( ledc_channel_config( &ledc_ch_vb ) );
+
+    // Set duty to 50%
+    ESP_ERROR_CHECK( ledc_set_duty( LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY ) );
+    // Update duty to apply the new value
+    ESP_ERROR_CHECK( ledc_update_duty( LEDC_MODE, LEDC_CHANNEL_0 ) );
+
+    ets_delay_us( 18 );
+
+    ESP_ERROR_CHECK( ledc_set_duty( LEDC_MODE, LEDC_CHANNEL_1, LEDC_DUTY ) );
+    ESP_ERROR_CHECK( ledc_update_duty( LEDC_MODE, LEDC_CHANNEL_1 ) );
+
+    // // Initialize fade service.
+    // ledc_fade_func_install(0);
+    // ledc_cbs_t callbacks = {
+    //     .fade_cb = cb_ledc_fade_end_event
+    // };
+
+    // SemaphoreHandle_t counting_sem = xSemaphoreCreateCounting(LEDC_TEST_CH_NUM, 0);
+
+    // ledc_cb_register( ledc_ch_va.speed_mode, ledc_ch_va.channel, &callbacks, (void *)counting_sem );
+
+}
+
+void toggleVA( void ){
+    while(1){
+        if( va_is_enabled ){
+            ESP_ERROR_CHECK( ledc_timer_pause( LEDC_MODE, LEDC_TIMER_0 ) );
+            ESP_ERROR_CHECK( ledc_timer_rst( LEDC_MODE, LEDC_TIMER_0 ) );
+
+            ets_delay_us( 18 );
+
+            ESP_ERROR_CHECK( ledc_timer_pause( LEDC_MODE, LEDC_TIMER_1 ) );
+            ESP_ERROR_CHECK( ledc_timer_rst( LEDC_MODE, LEDC_TIMER_1 ) );
+
+            // ets_delay_us( 17 );
+            // ESP_ERROR_CHECK( ledc_stop( LEDC_MODE, LEDC_CHANNEL_0, 0 ) );
+            // ESP_ERROR_CHECK( ledc_stop( LEDC_MODE, LEDC_CHANNEL_1, 0 ) );
+
+            // gpio_set_level( RLCD_VB_VCOM, 0 );
+            // gpio_set_level( RLCD_VA, 0 );
+
+            va_is_enabled = false;
+        }
+        else {
+            ESP_ERROR_CHECK( ledc_timer_resume( LEDC_MODE, LEDC_TIMER_0 ) );
+
+            ets_delay_us( 18 );
+
+            ESP_ERROR_CHECK( ledc_timer_resume( LEDC_MODE, LEDC_TIMER_1 ) );
+
+            // ESP_ERROR_CHECK( ledc_set_duty( LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY ) );
+            // ESP_ERROR_CHECK( ledc_set_duty( LEDC_MODE, LEDC_CHANNEL_1, LEDC_DUTY ) );
+            // ESP_ERROR_CHECK( ledc_update_duty( LEDC_MODE, LEDC_CHANNEL_0 ) );
+            // ESP_ERROR_CHECK( ledc_update_duty( LEDC_MODE, LEDC_CHANNEL_1 ) );
+
+            // ESP_ERROR_CHECK( ledc_set_duty_and_update( LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY, ledc_ch_va.hpoint ) );
+            // ESP_ERROR_CHECK( ledc_set_duty_and_update( LEDC_MODE, LEDC_CHANNEL_1, LEDC_DUTY, ledc_ch_vb.hpoint ) );
+            
+            va_is_enabled = true;
+        }
+
+        vTaskDelay( 1000 / portTICK_PERIOD_MS );
+    }
+}
+*/
+
+/* Motor control legacy (deprecated)
+void pwm_enable( void ){
+    ESP_ERROR_CHECK( mcpwm_start( MCPWM_UNIT_0, MCPWM_TIMER_0 ) );
+}
+
+void pwm_disable( void ){
+    ESP_ERROR_CHECK( mcpwm_stop( MCPWM_UNIT_0, MCPWM_TIMER_0 ) );
+}
+
+void va_vb_init( void ){
+    mcpwm_gpio_init( MCPWM_UNIT_0, MCPWM0A, RLCD_VA ); // To drive a RC servo, one MCPWM generator is enough
+    mcpwm_gpio_init( MCPWM_UNIT_0, MCPWM0B, RLCD_VB_VCOM );
+
+    mcpwm_config_t pwm_config = {
+        .frequency = 29, // frequency = 50Hz, i.e. for every servo motor time period should be 20ms
+        .cmpr_a = 0,     // duty cycle of PWMxA = 0
+        .cmpr_b = 50,
+        .counter_mode = MCPWM_UP_COUNTER,
+        .duty_mode = MCPWM_DUTY_MODE_0,
+    };
+    mcpwm_init( MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config );
+
+    ESP_ERROR_CHECK( mcpwm_set_duty_type( MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_OPR_A, MCPWM_DUTY_MODE_0 ) );
+    ESP_ERROR_CHECK( mcpwm_set_duty_type( MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_OPR_B, MCPWM_DUTY_MODE_0 ) );
+
+    ESP_ERROR_CHECK( mcpwm_set_duty( MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_OPR_A, 50 ) );
+    ESP_ERROR_CHECK( mcpwm_set_duty( MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_OPR_B, 50 ) );
+
+    pwm_enable();
+}
+
+bool pwm_is_enabled = false;
+
+void togglePWM( void ){
+    while(1){
+        if( pwm_is_enabled ){
+            pwm_disable();
+            pwm_is_enabled = false;
+        }
+        else {
+            pwm_enable();
+            pwm_is_enabled = true;
+        }
+
+        vTaskDelay( 1000 / portTICK_PERIOD_MS );
+    }
+}
+
+*/
+
+mcpwm_timer_handle_t pwm_timer_handle = NULL;
+mcpwm_timer_handle_t pwm_timer_handle_VB = NULL;
+
+mcpwm_gen_handle_t genr_a = NULL;
+mcpwm_gen_handle_t genr_b = NULL;
+
+bool pwm_is_enabled = false;
+
+mcpwm_sync_handle_t timer_sync_handle;
+
+void pwm_enable( void ){
+    ESP_ERROR_CHECK( mcpwm_timer_start_stop( pwm_timer_handle, MCPWM_TIMER_START_NO_STOP ) );
+    vTaskDelay( 20 / portTICK_PERIOD_MS );
+    ESP_ERROR_CHECK( mcpwm_timer_start_stop( pwm_timer_handle_VB, MCPWM_TIMER_START_NO_STOP ) );
+    // ESP_ERROR_CHECK( mcpwm_soft_sync_activate( timer_sync_handle ) );
+}
+
+void pwm_disable( void ){
+    ESP_ERROR_CHECK( mcpwm_timer_start_stop( pwm_timer_handle_VB, MCPWM_TIMER_STOP_FULL ) );
+    vTaskDelay( 20 / portTICK_PERIOD_MS );
+    ESP_ERROR_CHECK( mcpwm_timer_start_stop( pwm_timer_handle, MCPWM_TIMER_STOP_FULL ) );
+    // ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_a, 0, false ) );
+    // ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_b, 0, false ) );
+}
+
+static void gen_action_config(mcpwm_gen_handle_t gena, mcpwm_gen_handle_t genb, mcpwm_cmpr_handle_t cmpa, mcpwm_cmpr_handle_t cmpb){
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(gena,
+                    MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+                    MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(gena,
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpa, MCPWM_GEN_ACTION_LOW),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(genb,
+                    MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+                    MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(genb,
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpb, MCPWM_GEN_ACTION_LOW),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+    
+    /*
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(gena,
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpa, MCPWM_GEN_ACTION_HIGH),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpb, MCPWM_GEN_ACTION_LOW),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(genb,
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpb, MCPWM_GEN_ACTION_HIGH),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(genb,
+                    MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+                    MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+    */
+    /*
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(gena,
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpa, MCPWM_GEN_ACTION_HIGH),
+                    // MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, cmpb, MCPWM_GEN_ACTION_LOW),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(gena,
+                    MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+                    // MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
+                    MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+
+    // ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(genb,
+    //                 // MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
+    //                 MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
+    //                 MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+    ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(genb,
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, cmpb, MCPWM_GEN_ACTION_HIGH),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, cmpa, MCPWM_GEN_ACTION_LOW),
+                    MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+    */
+
+    // ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(gena,
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpa, MCPWM_GEN_ACTION_HIGH),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpb, MCPWM_GEN_ACTION_LOW),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+    // ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(genb,
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpb, MCPWM_GEN_ACTION_HIGH),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, cmpa, MCPWM_GEN_ACTION_LOW),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+
+
+    // ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(gena,
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpa, MCPWM_GEN_ACTION_HIGH),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, cmpb, MCPWM_GEN_ACTION_LOW),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+    // ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(genb,
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, cmpa, MCPWM_GEN_ACTION_LOW),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, cmpb, MCPWM_GEN_ACTION_HIGH),
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
+    // ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(genb,
+    //                 MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
+    //                 MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
+    //                 MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+}
+
+// mcpwm_timer_event_cb_t pwm_cb( mcpwm_timer_handle_t ){
+
+// }
+
+// void IRAM_ATTR isr_handler( void ){
+//     ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_a, 0, false ) );
+//     ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_b, 0, false ) );
+// }
+
+void va_vb_init( void ){
+    ESP_LOGI(TAG, "Create timer and operator");
+    mcpwm_timer_config_t timer_config = {
+        .group_id = 0,
+        .clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT,
+        .resolution_hz = 1000000,   // 1us resolution
+        .period_ticks = 40000,      // 34000us = 34ms
+        .count_mode = MCPWM_TIMER_COUNT_MODE_UP//_DOWN,
+    };
+    ESP_ERROR_CHECK(mcpwm_new_timer(&timer_config, &pwm_timer_handle));
+
+    mcpwm_timer_config_t timer_config_VB = {
+        .group_id = 1,
+        .clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT,
+        .resolution_hz = 1000000,   // 1us resolution
+        .period_ticks = 40000,      // 34000us = 34ms
+        .count_mode = MCPWM_TIMER_COUNT_MODE_UP//_DOWN,
+    };
+    ESP_ERROR_CHECK(mcpwm_new_timer(&timer_config_VB, &pwm_timer_handle_VB));
+
+    /* // Software sync; useless right now
+    // mcpwm_soft_sync_config_t timer_sync_cfg = {
+    // };
+    // ESP_ERROR_CHECK( mcpwm_new_soft_sync_src( &timer_sync_cfg, &timer_sync_handle ) );
+    */
+
+    /* // Timer sync; works, but not for my needs
+    // // Create a sync source object
+    // mcpwm_timer_sync_src_config_t timer_sync_cfg = {
+    //     .timer_event = MCPWM_TIMER_EVENT_FULL,
+    //     .flags.propagate_input_sync = false
+    // };
+    // mcpwm_sync_handle_t timer_sync_src_handle;
+
+    // ESP_ERROR_CHECK( mcpwm_new_timer_sync_src( pwm_timer_handle, &timer_sync_cfg, &timer_sync_src_handle ) );
+
+    // // Set phase on sync
+    // mcpwm_timer_sync_phase_config_t timer_sync_phase_cfg = {
+    //     .sync_src = timer_sync_src_handle,
+    //     .count_value = 0,
+    //     .direction = MCPWM_TIMER_DIRECTION_UP
+    // };
+
+    // ESP_ERROR_CHECK( mcpwm_timer_set_phase_on_sync( pwm_timer_handle, &timer_sync_phase_cfg ) );
+    */
+
+    /* // GPIO sync; doesn't seem to work in this application
+    // mcpwm_sync_handle_t gpio_sync_source = NULL;
+    // mcpwm_gpio_sync_src_config_t gpio_sync_config = {
+    //     .group_id = 0,              // GPIO fault should be in the same group of the above timers
+    //     .gpio_num = RLCD_VA,
+    //     .flags.pull_up = true,
+    //     .flags.active_neg = true,  // By default, a posedge pulse can trigger a sync event
+    //     .flags.io_loop_back = true
+    // };
+    // ESP_ERROR_CHECK( mcpwm_new_gpio_sync_src( &gpio_sync_config, &gpio_sync_source ) );
+
+    // mcpwm_timer_sync_phase_config_t sync_phase_config = {
+    //     .count_value = 0,                      // sync phase: target count value
+    //     .direction = MCPWM_TIMER_DIRECTION_UP, // sync phase: count direction
+    //     .sync_src = gpio_sync_source,          // sync source
+    // };
+    
+    // ESP_ERROR_CHECK( mcpwm_timer_set_phase_on_sync( pwm_timer_handle, &sync_phase_config ) );
+    */
+
+
+    // MCPWM[MCPWM_UNIT_0]->int_ena.val = CAP0_INT_EN | CAP1_INT_EN | CAP2_INT_EN;  //Enable interrupt on  CAP0, CAP1 and CAP2 signal
+    // mcpwm_isr_register(MCPWM_UNIT_0, isr_handler, NULL, ESP_INTR_FLAG_IRAM, NULL);  //Set ISR Handler
+
+    // mcpwm_timer_event_callbacks_t cbs = {
+    //     .on_full = 1,
+    //     .on_empty = 1,
+    // };
+
+    // ESP_ERROR_CHECK( mcpwm_timer_register_event_callbacks( pwm_timer_handle, &cbs, &isr_handler ) );
+    // ESP_ERROR_CHECK( mcpwm_timer_register_event_callbacks( pwm_timer_handle, &cbs, NULL ) );
+
+    mcpwm_oper_handle_t oper = NULL;
+    mcpwm_operator_config_t operator_config = {
+        .group_id = 0, // operator must be in the same group to the timer
+    };
+    ESP_ERROR_CHECK(mcpwm_new_operator(&operator_config, &oper));
+
+    mcpwm_oper_handle_t oper_VB = NULL;
+    mcpwm_operator_config_t operator_config_VB = {
+        .group_id = 1, // operator must be in the same group to the timer
+    };
+    ESP_ERROR_CHECK(mcpwm_new_operator(&operator_config_VB, &oper_VB));
+
+    ESP_LOGI(TAG, "Connect timer and operator");
+    ESP_ERROR_CHECK(mcpwm_operator_connect_timer(oper, pwm_timer_handle));
+    ESP_ERROR_CHECK(mcpwm_operator_connect_timer(oper_VB, pwm_timer_handle_VB));
+
+    ESP_LOGI(TAG, "Create cmpr_a and cmpr_b from the operator");
+    mcpwm_cmpr_handle_t cmpr_a = NULL;
+    mcpwm_cmpr_handle_t cmpr_b = NULL;
+
+    mcpwm_comparator_config_t comparator_config = {
+        .flags.update_cmp_on_tez = true,
+    };
+
+    ESP_ERROR_CHECK(mcpwm_new_comparator(oper, &comparator_config, &cmpr_a));
+    ESP_ERROR_CHECK(mcpwm_new_comparator(oper_VB, &comparator_config, &cmpr_b));
+    
+    ESP_LOGI(TAG, "Create genr_a and genr_b from the operator");
+    // mcpwm_gen_handle_t genr_a = NULL;
+    // mcpwm_gen_handle_t genr_b = NULL;
+
+    mcpwm_generator_config_t gen_a_config = {
+        .gen_gpio_num = RLCD_VA,
+    };
+    mcpwm_generator_config_t gen_b_config = {
+        .gen_gpio_num = RLCD_VB_VCOM,
+    };
+    
+    ESP_ERROR_CHECK(mcpwm_new_generator(oper, &gen_a_config, &genr_a));
+    ESP_ERROR_CHECK(mcpwm_new_generator(oper_VB, &gen_b_config, &genr_b));
+
+    // set the initial compare value, so that the servo will spin to the center position
+    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(cmpr_a, 20000));//10));
+    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(cmpr_b, 20000));
+
+    ESP_LOGI(TAG, "Set genr_a and genr_b action on timer and compare event");
+    gen_action_config( genr_a, genr_b, cmpr_a, cmpr_b );
+    // go high on counter empty
+    // ESP_ERROR_CHECK(mcpwm_generator_set_action_on_timer_event(generator,
+    //                 MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH)));
+    // // go low on compare threshold
+    // ESP_ERROR_CHECK(mcpwm_generator_set_action_on_compare_event(generator,
+    //                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, comparator, MCPWM_GEN_ACTION_LOW)));
+
+    ESP_LOGI(TAG, "Enable and start timer");
+    ESP_ERROR_CHECK(mcpwm_timer_enable(pwm_timer_handle));
+    // ESP_ERROR_CHECK(mcpwm_timer_start_stop(pwm_timer_handle, MCPWM_TIMER_START_NO_STOP));
+
+    // vTaskDelay( 20 / portTICK_PERIOD_MS );
+    ESP_ERROR_CHECK(mcpwm_timer_enable(pwm_timer_handle_VB));
+    // ESP_ERROR_CHECK(mcpwm_timer_start_stop(pwm_timer_handle_VB, MCPWM_TIMER_START_NO_STOP));
+}
+
+void togglePWM( void ){
+    while(1){
+        if( pwm_is_enabled ){
+            pwm_disable();
+            pwm_is_enabled = false;
+        }
+        else {
+            pwm_enable();
+            pwm_is_enabled = true;
+        }
+
+        vTaskDelay( 1000 / portTICK_PERIOD_MS );
+    }
+}
+
+
+void rlcd_clearImageBuf( void ){
+    for( uint16_t i=0; i < RLCD_BUF_SIZE; i++ ){
+        rlcd_buf[i] = 0x00;
+    }
+}
+
+void rlcd_fillImage( void ){
+    for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
+        rlcd_buf[i] = (1<<2);
+    }
+    for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
+        rlcd_buf[2*i] = (1<<3);
+    }
+}
+
+void rlcd_updateImageBuf( void ){   // bool all_black ){
+    outDataBuf_update();
+    // i2s_updateOutputBuf( &I2S1, all_black );
+}
+
+void rlcd_resume( void ){
+    // Power-on sequence:
+
+    // Turn on voltage regulators
+    // and wait for them to settle.
+
+    // Wait for 2 GCK cycles after VDDs went HIGH
+    ets_delay_us( 267 );    //tlwGCK*2 + thwGCK*2 );
+
+    // Pixel memory init: write all screen black.
+    // rlcd_fillBlack();
+    // rlcd_clearImageBuf();
+    // rlcd_updateImageBuf( true );
+    outDataBuf_clearImage();
+    vTaskDelay( 10 / portTICK_PERIOD_MS );
+    testTransmit();
+
+    // Wait for the end of the image transmission
+    vTaskDelay( 40 / portTICK_PERIOD_MS );
+
+    // Wait >=30us for VCOM, VA and VB
+    ets_delay_us( 30 );
+
+    // Start VCOM, VA and VB
+
+    pwm_enable();
+
+    rlcd_updateImageBuf();
+
+    vTaskDelay( 50 / portTICK_PERIOD_MS );
+}
+
+void rlcd_suspend( void ){
+    // Power off sequence:
+
+    // Wait until the last frame transmission finishes,
+    // just in case.
+    vTaskDelay( 40 / portTICK_PERIOD_MS );
+
+    // Pixel memory init: write all screen black.
+    outDataBuf_clearImage();
+    vTaskDelay( 10 / portTICK_PERIOD_MS );
+    testTransmit();
+
+    vTaskDelay( 40 / portTICK_PERIOD_MS );
+
+    pwm_disable();
+
+    // Wait >=30us for VCOM, VA and VB
+    ets_delay_us( 30 );
+
+    // Turn off voltage regulators
+
+}
 
 void rlcd_init( void ){
     rlcd_setupPins();
@@ -489,12 +998,13 @@ void rlcd_init( void ){
 
     */
 
-    for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
-        rlcd_buf[i] = (1<<2);
-    }
-    for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
-        rlcd_buf[2*i] = (1<<3);
-    }
+    // for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
+    //     rlcd_buf[i] = (1<<2);
+    // }
+    // for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
+    //     rlcd_buf[2*i] = (1<<3);
+    // }
+    rlcd_clearImageBuf();
 
     /*
 
@@ -584,55 +1094,28 @@ void rlcd_init( void ){
     ESP_LOGI( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
                     cfg.tx_right_first, cfg.rx_right_first, cfg.tx_msb_right, cfg.rx_msb_right, cfg.tx_chan_mod, cfg.rx_chan_mod );
 
-    // ESP_LOGI( TAG, "Installing RMT encoder for BCK signal..." );
     rlcd_rmt_installEncoderGCK( rmt_ch_array );
     rlcd_rmt_installEncoderGSP( rmt_ch_array );
     rlcd_rmt_installEncoderINTB( rmt_ch_array );
 
+    // For VCOM, VA and VB signals
+    // ledc_init();
+    va_vb_init();
+    
     // gpio_set_level( RLCD_INTB, 1 );
 
     // gpio_set_level( RLCD_INTB, 0 );
 
-    /*
 
-    // Power-on sequence:
-
-    // Turn on voltage regulators
-    // and wait for them to settle.
-
-    // Wait for 2 GCK cycles
-    ets_delay_us( tlwGCK*2 + thwGCK*2 );
-
-    // Pixel memory init: write all screen black.
-    rlcd_fillBlack();
-
-
-    // Wait >=30us for VCOM, VA and VB
-    ets_delay_us( 30 );
-
-    // Start VCOM, VA and VB
-
-
+    rlcd_resume();
 
     // Normal operation:
 
     // Send a frame
     // ets_delay_ms
-
-
-
-    // Power off sequence:
-
-    // Pixel memory init: write all screen black.
-
-    // Wait >=30us for VCOM, VA and VB
-    ets_delay_us( 30 );
-
-    // Turn off voltage regulators
-
-    */
-
 }
+
+
 
 void testTransmit( void ){
     

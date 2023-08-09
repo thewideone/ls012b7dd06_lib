@@ -39,6 +39,7 @@
 
 #define DMA_MAX (4096-4)
 
+i2s_parallel_buffer_desc_t* image_buf_desc = NULL;
 
 typedef struct {
     // Array of DMA buffer descriptors, not buffers!
@@ -367,7 +368,7 @@ static void dma_InitEmptyDescArray(volatile lldesc_t* dma_desc_array, uint16_t d
 
         dma_desc_array[i].length = OUT_DATA_BUF_LINE_W;
 		dma_desc_array[i].size = dma_desc_array[i].length;
-		dma_desc_array[i].buf = NULL;
+		dma_desc_array[i].buf = out_data_buf + ( i * OUT_DATA_BUF_LINE_W ); //NULL;
 
         if( i == 0 ){
             dma_desc_array[i].sosf = 1;
@@ -434,23 +435,89 @@ void dma_AllocateDescs( i2s_dev_t* dev ){
     ESP_LOGI( TAG, "dma_AllocateDescs(): Made a list of %d empty DMA descriptors.", st->dma_desc_count );
 }
 
+void outDataBuf_swapBytePairs( void ){
+    // ESP_LOGD( TAG, "outDataBuf_swapBytePairs(): Swapping byte pairs..." );
+    // Swap byte pairs, because of transmission order from I2S's FIFO
+    uint8_t temp1, temp2;
+    for( uint32_t i = 0; i < OUT_DATA_BUF_SIZE; i += 4 ){
+        temp1 = out_data_buf[i];
+        temp2 = out_data_buf[i+1];
+
+        out_data_buf[i] = out_data_buf[i+2];
+        out_data_buf[i+1] = out_data_buf[i+3];
+
+        out_data_buf[i+2] = temp1;
+        out_data_buf[i+3] = temp2;
+    }
+}
+
 // 
+// Prepare the output data buffer (out_data_buf[]):
+//  - encode control signals
+//  - swap byte pairs
 // Fill the array of DMA descriptors with image data.
 // dev          - I2S device handle
 // buffer_desc  - pointer to an image buffer descriptor
 // 
-void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buffer_desc ){
-    i2s_parallel_state_t* st = i2s_state[i2s_getDevNum(dev)];
+void outDataBuf_prepare( void ){
+    // i2s_parallel_state_t* st = i2s_state[i2s_getDevNum(dev)];
 
-    ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Preparing output data buffer: size = %d, line width = %d...", OUT_DATA_BUF_SIZE, OUT_DATA_BUF_LINE_W );
+    ESP_LOGD( TAG, "outDataBuf_prepare(): Preparing output data buffer: size = %d, line width = %d...", OUT_DATA_BUF_SIZE, OUT_DATA_BUF_LINE_W );
     
-    vTaskDelay( 30 / portTICK_PERIOD_MS );
+    // vTaskDelay( 30 / portTICK_PERIOD_MS );
 
+    ESP_LOGD( TAG, "outDataBuf_prepare(): Clearing the buffer..." );
+
+    // Clear the output data buffer
+    for( uint32_t i=0; i < OUT_DATA_BUF_SIZE; i++ )
+        out_data_buf[i] = 0x00;
+
+    ESP_LOGD( TAG, "outDataBuf_prepare(): Encoding control signals..." );
+
+    // Encode control signals
+    for( uint16_t line_no = 0; line_no < RLCD_DISP_H; line_no++ ){
+        // Fill MSB:
+
+        // Start of the whole MSB of image line data
+        uint32_t out_buf_line_start_idx = line_no*2 * OUT_DATA_BUF_LINE_W;
+        // End of MSB of image line data
+        uint32_t out_buf_line_end_idx = out_buf_line_start_idx + OUT_DATA_BUF_LINE_W - 1;
+
+        // ESP_LOGD( TAG, "outDataBuf_prepare(): \tFilling MSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
+
+        // Encode BSP control signal
+        for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
+            out_data_buf[ out_buf_line_start_idx + i ] = ( 1 << GPIO_BUS_BSP_BIT );
+        // Encode GEN control signal
+        for( uint8_t i = 0; i < THHGCK_LEN; i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = 0x00;
+        // During the last couple of periods GEN is low
+        for( uint8_t i = THHGCK_LEN; i < ( THHGCK_LEN + THWGEN_LEN ); i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
+
+        // Fill LSB:
+
+        out_buf_line_start_idx += OUT_DATA_BUF_LINE_W;
+        out_buf_line_end_idx = out_buf_line_start_idx + OUT_DATA_BUF_LINE_W - 1;
+
+        // ESP_LOGD( TAG, "outDataBuf_prepare(): \tFilling LSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
+        
+        // Encode BSP control signal
+        for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
+            out_data_buf[ out_buf_line_start_idx + i ] = ( 1 << GPIO_BUS_BSP_BIT );
+        // Encode GEN control signal
+        for( uint8_t i = 0; i < THHGCK_LEN; i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = 0x00;
+        // During the last couple of periods GEN is low
+        for( uint8_t i = THHGCK_LEN; i < ( THHGCK_LEN + THWGEN_LEN ); i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
+    }
+
+    /* // All in one loop
     // For each image line
     for( uint16_t line_no = 0; line_no < RLCD_DISP_H; line_no++ ){
-
-        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Prep. line %d...", line_no );
-
         // Fill with MSB:
 
         // Start of the whole MSB of image line data
@@ -463,23 +530,124 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         // End of the pixel colour data in MSB of image line data
         uint32_t out_buf_line_rgb_end = out_buf_line_end_idx - RGB_CLK_TRAILING_DUMMY_PERIOD_CNT;
 
-        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tFilling MSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        // ESP_LOGD( TAG, "outDataBuf_prepare(): \tFilling MSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
         //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
 
         // Encode BSP control signal
-        // out_data_buf[ out_buf_line_start_idx ] = ( 1 << GPIO_BUS_BSP_BIT ); // 1st parallel data byte
-        // out_data_buf[ out_buf_line_start_idx + 1 ] = ( 1 << GPIO_BUS_BSP_BIT ); // 2nd parallel data byte
         for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
             out_data_buf[ out_buf_line_start_idx + i ] = ( 1 << GPIO_BUS_BSP_BIT );
         // Encode GEN control signal
         for( uint8_t i = 0; i < THHGCK_LEN; i++ )
             out_data_buf[ out_buf_line_end_idx - i ] = 0x00;
-        // "..._PERIOD_CNT-1" is because let's wait for the falling edge of BCK
+        // During the last couple of periods GEN is low
         for( uint8_t i = THHGCK_LEN; i < ( THHGCK_LEN + THWGEN_LEN ); i++ )
             out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
-        // // During the last 2 periods GEN is low
-        // out_data_buf[ out_buf_line_end_idx - 1 ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
-        // out_data_buf[ out_buf_line_end_idx ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
+        
+        // Fill the buffer with MSB of pixel data in current line
+        
+        // out_data_buf[ out_buf_line_rgb_start ] = buffer_desc->memory[ line_no ];
+
+        if( !all_black ){
+            for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
+                out_data_buf[ i ] |= 0x01;
+                out_data_buf[ i+1 ] |= 0x02;
+                out_data_buf[ i+2 ] |= 0x04;
+                out_data_buf[ i+3 ] |= 0x08;
+            }
+        }
+
+        // Fill with LSB:
+
+        out_buf_line_start_idx += OUT_DATA_BUF_LINE_W;
+        out_buf_line_end_idx = out_buf_line_start_idx + OUT_DATA_BUF_LINE_W - 1;
+
+        out_buf_line_rgb_start = out_buf_line_start_idx + RGB_CLK_LEADING_DUMMY_PERIOD_CNT;
+        out_buf_line_rgb_end = out_buf_line_end_idx - RGB_CLK_TRAILING_DUMMY_PERIOD_CNT;
+
+        // ESP_LOGD( TAG, "outDataBuf_prepare(): \tFilling LSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
+        
+        // Encode BSP control signal
+        for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
+            out_data_buf[ out_buf_line_start_idx + i ] = ( 1 << GPIO_BUS_BSP_BIT );
+        // Encode GEN control signal
+        for( uint8_t i = 0; i < THHGCK_LEN; i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = 0x00;
+        // During the last couple of periods GEN is low
+        for( uint8_t i = THHGCK_LEN; i < ( THHGCK_LEN + THWGEN_LEN ); i++ )
+            out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
+
+        // Fill the buffer with LSB of pixel data in current line
+        if( !all_black ){
+            for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
+                out_data_buf[ i ] |= 0x01;
+                out_data_buf[ i+1 ] |= 0x02;
+                out_data_buf[ i+2 ] |= 0x04;
+                out_data_buf[ i+3 ] |= 0x08;
+            }
+        }
+    }
+    */
+    
+    // ESP_LOGD( TAG, "outDataBuf_prepare(): Swapping byte pairs..." );
+
+    outDataBuf_swapBytePairs();
+
+    /*
+    ESP_LOGD( TAG, "outDataBuf_prepare(): Filling %d descriptors with image data...", st->dma_desc_count );
+    // For each DMA descriptor (there are 2*OUT_DATA_BUF_LINE_W descriptors)
+    for( uint16_t i = 0; i < st->dma_desc_count; i++ ){
+        // For now:
+        // Set the starting position in the image buffer.
+        // st->dma_desc_array[i].buf = buffer_desc->memory + ( i * OUT_DATA_BUF_LINE_W );
+
+        // ESP_LOGD( TAG, "outDataBuf_prepare(): \tDescriptor %d: start = out_data_buf + %d.", i, ( i * OUT_DATA_BUF_LINE_W ) );
+        st->dma_desc_array[i].buf = out_data_buf + ( i * OUT_DATA_BUF_LINE_W );
+    }
+    */
+
+    // ESP_LOGI( TAG, "outDataBuf_prepare(): Filled %d descriptors with image data.", st->dma_desc_count );
+}
+
+// 
+// Clear image data in the output data buffer.
+// 
+void outDataBuf_clearImage( void ){
+    uint8_t rgb_pins_bit_mask = (1 << GPIO_BUS_R0_BIT) | (1 << GPIO_BUS_R1_BIT) |
+                           (1 << GPIO_BUS_G0_BIT) | (1 << GPIO_BUS_G1_BIT) |
+                           (1 << GPIO_BUS_B0_BIT) | (1 << GPIO_BUS_B1_BIT);
+    
+    
+    for( uint32_t i=0; i < OUT_DATA_BUF_SIZE; i++ )
+        out_data_buf[i] &= ~rgb_pins_bit_mask;
+}
+
+// 
+// Fill the output data buffer with image data.
+// 
+void outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc ){
+    // Clear image data (temporary; until I manage to copy rlcd_buf into out_data_buf)
+
+    // Temporarily until I manage to copy rlcd_buf into out_data_buf:
+    // Unswap byte pairs for the time of encoding image
+    outDataBuf_swapBytePairs();
+
+    // Encode image data
+    for( uint16_t line_no = 0; line_no < RLCD_DISP_H; line_no++ ){
+        // Fill with MSB:
+
+        // Start of the whole MSB of image line data
+        uint32_t out_buf_line_start_idx = line_no*2 * OUT_DATA_BUF_LINE_W;
+        // End of MSB of image line data
+        uint32_t out_buf_line_end_idx = out_buf_line_start_idx + OUT_DATA_BUF_LINE_W - 1;
+
+        // Start of the pixel colour data in MSB of image line data
+        uint32_t out_buf_line_rgb_start = out_buf_line_start_idx + RGB_CLK_LEADING_DUMMY_PERIOD_CNT;
+        // End of the pixel colour data in MSB of image line data
+        uint32_t out_buf_line_rgb_end = out_buf_line_end_idx - RGB_CLK_TRAILING_DUMMY_PERIOD_CNT;
+
+        // ESP_LOGD( TAG, "outDataBuf_prepare(): \tFilling MSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
 
         // Fill the buffer with MSB of pixel data in current line
         
@@ -500,26 +668,10 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         out_buf_line_rgb_start = out_buf_line_start_idx + RGB_CLK_LEADING_DUMMY_PERIOD_CNT;
         out_buf_line_rgb_end = out_buf_line_end_idx - RGB_CLK_TRAILING_DUMMY_PERIOD_CNT;
 
-        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tFilling LSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
+        // ESP_LOGD( TAG, "outDataBuf_prepare(): \tFilling LSB of line %d: start_idx = %d,\tend_idx = %d,\trgb_start = %d,\trgb_end = %d...",
         //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
-        
-        // Encode BSP control signal
-        for( uint8_t i=0; i < RGB_CLK_LEADING_DUMMY_PERIOD_CNT; i++ )
-            out_data_buf[ out_buf_line_start_idx + i ] = ( 1 << GPIO_BUS_BSP_BIT );
-        // Encode GEN control signal
-        for( uint8_t i = 0; i < THHGCK_LEN; i++ )
-            out_data_buf[ out_buf_line_end_idx - i ] = 0x00;
-        // "..._PERIOD_CNT-1" is because let's wait for the falling edge of BCK
-        for( uint8_t i = THHGCK_LEN; i < ( THHGCK_LEN + THWGEN_LEN ); i++ )
-            out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
-        // for( uint8_t i=0; i < RGB_CLK_TRAILING_DUMMY_PERIOD_CNT-1; i++ )
-        //     out_data_buf[ out_buf_line_end_idx - i ] = ( 1 << GPIO_BUS_GEN_BIT );
-        // // During the last 2 periods GEN is low
-        // out_data_buf[ out_buf_line_end_idx - 1 ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
-        // out_data_buf[ out_buf_line_end_idx ] = 0;   //( 1 << GPIO_BUS_GEN_BIT );
 
         // Fill the buffer with LSB of pixel data in current line
-
         for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
             out_data_buf[ i ] |= 0x01;
             out_data_buf[ i+1 ] |= 0x02;
@@ -528,38 +680,22 @@ void dma_fillDescsWithPixelData( i2s_dev_t* dev, i2s_parallel_buffer_desc_t* buf
         }
     }
 
-    ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Swapping byte pairs..." );
+    // Temporarily until I manage to copy rlcd_buf into out_data_buf:
+    // Swap byte pairs again 
+    outDataBuf_swapBytePairs();
+}
 
-    // Swap byte pairs, because of transmission order from I2S's FIFO
-    uint8_t temp1, temp2;
-    for( uint32_t i = 0; i < OUT_DATA_BUF_SIZE; i += 4 ){
-        temp1 = out_data_buf[i];
-        temp2 = out_data_buf[i+1];
-
-        out_data_buf[i] = out_data_buf[i+2];
-        out_data_buf[i+1] = out_data_buf[i+3];
-
-        out_data_buf[i+2] = temp1;
-        out_data_buf[i+3] = temp2;
-
-        // if( i % 500 == 0 ){
-        //     ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Pair %ld...", i );
-        //     vTaskDelay( 20 / portTICK_PERIOD_MS );
-        // }
+// 
+// Update the output data buffer with a new image data.
+// 
+void outDataBuf_update( void ){//} i2s_dev_t *dev ){
+    if( image_buf_desc == NULL ){
+        ESP_LOGW( TAG, "outDataBuf_update(): image_buf_desc == NULL. Returning." );
+        return;
     }
 
-    ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): Filling %d descriptors with image data...", st->dma_desc_count );
-    // For each DMA descriptor (there are 2*OUT_DATA_BUF_LINE_W descriptors)
-    for( uint16_t i = 0; i < st->dma_desc_count; i++ ){
-        // For now:
-        // Set the starting position in the image buffer.
-        // st->dma_desc_array[i].buf = buffer_desc->memory + ( i * OUT_DATA_BUF_LINE_W );
-
-        // ESP_LOGD( TAG, "dma_fillDescsWithPixelData(): \tDescriptor %d: start = out_data_buf + %d.", i, ( i * OUT_DATA_BUF_LINE_W ) );
-        st->dma_desc_array[i].buf = out_data_buf + ( i * OUT_DATA_BUF_LINE_W );
-    }
-
-    ESP_LOGI( TAG, "dma_fillDescsWithPixelData(): Filled %d descriptors with image data.", st->dma_desc_count );
+    outDataBuf_encodeImage( image_buf_desc );
+    // outDataBuf_prepare( dev, image_buf_desc );
 }
 
 // 
@@ -680,8 +816,10 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     dev->sample_rate_conf.tx_bck_div_num = 2;
 
     ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source to %ldHz:", config->clock_speed_hz );
+
+    /* // APLL clock source stuff
     
-    ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Rebooting APLL clock..." );
+    // ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Rebooting APLL clock..." );
     
     // Configure APLL clock
     // RTCCNTL.ana_conf.plla_force_pd = 0; // Power down APLL
@@ -735,7 +873,7 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     }
     else {
         ESP_LOGW( TAG, "i2s_parallel_setup(): Failed to calculate APLL coefficients. Proceeding with PLL_D2_CLK as clock source." );
-
+    */
         // Reset I2S clock configuration
         dev->clkm_conf.val = 0;
 
@@ -751,7 +889,9 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
         ESP_LOGD( TAG, "i2s_parallel_setup(): Setting I2S clock source: Resulting I2S%d_CLK frequency should be %fHz.",
                         i2s_getDevNum( dev ),
                         (float)( 80000000.0 / (dev->clkm_conf.clkm_div_num + (dev->clkm_conf.clkm_div_b)/(dev->clkm_conf.clkm_div_a)) ) );
+    /*
     }
+    */
 
     ESP_LOGD( TAG, "i2s_parallel_setup(): I2S clock configured with:" );
     ESP_LOGD( TAG, "i2s_parallel_setup(): \t clka_en = %d, clkm_div_a = %d, clkm_div_b = %d, clkm_div_num = %d,",
@@ -811,7 +951,9 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
     i2s_state[i2s_getDevNum(dev)] = malloc(sizeof(i2s_parallel_state_t));
     // dma_AllocateDescs( dev, config->buf );
     dma_AllocateDescs( dev );
-    dma_fillDescsWithPixelData( dev, config->buf );
+
+    image_buf_desc = config->buf;
+    outDataBuf_prepare();
     // i2s_state[i2s_getDevNum(dev)] = malloc(sizeof(i2s_parallel_state_t));
     // i2s_parallel_state_t *st = i2s_state[i2s_getDevNum(dev)];
 
@@ -874,7 +1016,7 @@ void i2s_parallel_setup( i2s_dev_t *dev, const i2s_parallel_config_t *config ) {
 }
 
 // 
-// Send data buffer over I2S.
+// Prepare I2S for a transmission of all image lines.
 // 
 void i2s_prepareTx( i2s_dev_t *dev ){
 // void i2s_send_buf( i2s_dev_t *dev ){
@@ -887,7 +1029,7 @@ void i2s_prepareTx( i2s_dev_t *dev ){
 
     int no = i2s_getDevNum(dev);
     if (i2s_state[no]==NULL){
-        ESP_LOGW( TAG, "i2s_send_buf(): i2s_state[%d] == NULL. Returning.", no );
+        ESP_LOGW( TAG, "i2s_prepareTx(): i2s_state[%d] == NULL. Returning.", no );
         return;
     }
 
@@ -928,6 +1070,9 @@ void i2s_prepareTx( i2s_dev_t *dev ){
     // dev->conf.tx_start = 1;
 }
 
+// 
+// Start I2S transmission
+// 
 void i2s_startTx( i2s_dev_t *dev ){
     // Start transmission
     dev->conf.tx_start = 1;

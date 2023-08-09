@@ -104,6 +104,14 @@
 
 #define RLCD_INTB_FREQ 400000   // 0.4MHz, 2.5us resolution
 
+#define LEDC_TIMER              LEDC_TIMER_0
+#define LEDC_MODE               LEDC_LOW_SPEED_MODE
+#define LEDC_OUTPUT_IO          (RLCD_VA) // Define the output GPIO
+#define LEDC_CHANNEL            LEDC_CHANNEL_0
+#define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Set duty resolution to 13 bits
+#define LEDC_DUTY               (4095) // Set duty to 50%. ((2 ** 13) - 1) * 50% = 4095
+#define LEDC_FREQUENCY          (29) // Frequency in Hertz. Set frequency at 5 kHz
+
 #include "i2s_parallel_driver/i2s_parallel.h"
 // // Extern here used for temporary config tests
 // extern i2s_parallel_buffer_desc_t bufdesc;
@@ -113,6 +121,14 @@ void rlcd_init( void );
 // void rlcd_init( i2s_parallel_config_t* cfg );
 void rlcd_testGPIOs( uint8_t pins_state );
 
+void togglePWM( void );
+
 void testTransmit( void );
+
+void rlcd_fillImage( void );
+void rlcd_updateImageBuf( void );   //bool all_black );
+
+void rlcd_resume( void );
+void rlcd_suspend( void );
 
 #endif // _LS012B7DD06_HAL_H_
