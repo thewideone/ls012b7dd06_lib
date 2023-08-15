@@ -625,7 +625,7 @@ void outDataBuf_clearImage( void ){
 // 
 // Fill the output data buffer with image data.
 // 
-void outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc ){
+void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc ){
     // Clear image data (temporary; until I manage to copy rlcd_buf into out_data_buf)
 
     // Temporarily until I manage to copy rlcd_buf into out_data_buf:

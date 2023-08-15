@@ -1106,7 +1106,7 @@ void rlcd_init( void ){
 
     vTaskDelay(50 / portTICK_PERIOD_MS);
 
-    ESP_LOGI( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
+    ESP_LOGD( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
                     cfg.tx_right_first, cfg.rx_right_first, cfg.tx_msb_right, cfg.rx_msb_right, cfg.tx_chan_mod, cfg.rx_chan_mod );
 
     rlcd_rmt_installEncoderGCK( rmt_ch_array );
@@ -1125,6 +1125,8 @@ void rlcd_init( void ){
     rlcd_resume();
 
     // Normal operation:
+
+    ESP_LOGI( TAG, "LCD init done." );
 
     // Send a frame
     // ets_delay_ms
