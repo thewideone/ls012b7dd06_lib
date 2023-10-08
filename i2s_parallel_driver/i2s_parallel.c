@@ -632,6 +632,8 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
     // Unswap byte pairs for the time of encoding image
     outDataBuf_swapBytePairs();
 
+    // uint32_t for_cnt = 0;
+
     // Encode image data
     for( uint16_t line_no = 0; line_no < RLCD_DISP_H; line_no++ ){
         // Fill with MSB:
@@ -652,12 +654,58 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
         // Fill the buffer with MSB of pixel data in current line
         
         // out_data_buf[ out_buf_line_rgb_start ] = buffer_desc->memory[ line_no ];
+        
+        // for( uint32_t odb_i = out_buf_line_rgb_start, imgb_i = line_no * RLCD_DISP_W;
+        //      odb_i < out_buf_line_rgb_end && imgb_i < RLCD_DISP_H * RLCD_DISP_W;
+        //      odb_i++, imgb_i += 2 ){
+        
+        // Image buffer pixel iterator
+        uint32_t imgb_i = line_no * RLCD_DISP_W;
 
-        for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
-            out_data_buf[ i ] |= 0x01;
-            out_data_buf[ i+1 ] |= 0x02;
-            out_data_buf[ i+2 ] |= 0x04;
-            out_data_buf[ i+3 ] |= 0x08;
+        // for_cnt = 0;
+
+        // For each pixel's MSB in the output data buffer
+        for( uint32_t odb_i = out_buf_line_rgb_start; odb_i < out_buf_line_rgb_end; odb_i++ ){
+
+            // if( imgb_i >= RLCD_DISP_H * RLCD_DISP_W ){
+            //     ESP_LOGW( TAG, "imgb_i = %lu overflow. Returning.", imgb_i );
+            //     return;
+            // }
+            
+            if( buffer_desc->memory[imgb_i].bits.r_msb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R0_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R0_BIT);
+
+            if( buffer_desc->memory[imgb_i].bits.g_msb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G0_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G0_BIT);
+            
+            if( buffer_desc->memory[imgb_i].bits.b_msb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B0_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B0_BIT);
+            
+
+            if( buffer_desc->memory[imgb_i+1].bits.r_msb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R1_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R1_BIT);
+            
+            if( buffer_desc->memory[imgb_i+1].bits.g_msb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G1_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G1_BIT);
+            
+            if( buffer_desc->memory[imgb_i+1].bits.b_msb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B1_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B1_BIT);
+
+            imgb_i += 2;
+
+            // for_cnt++;
         }
 
         // Fill with LSB:
@@ -672,17 +720,82 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
         //           line_no, out_buf_line_start_idx, out_buf_line_end_idx, out_buf_line_rgb_start, out_buf_line_rgb_end );
 
         // Fill the buffer with LSB of pixel data in current line
-        for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
-            out_data_buf[ i ] |= 0x01;
-            out_data_buf[ i+1 ] |= 0x02;
-            out_data_buf[ i+2 ] |= 0x04;
-            out_data_buf[ i+3 ] |= 0x08;
+        // for( uint32_t i = out_buf_line_rgb_start; i < out_buf_line_rgb_end; i+=4 ){
+        /*
+        for( uint32_t odb_i = out_buf_line_rgb_start, imgb_i = line_no * RLCD_DISP_W;
+             odb_i < out_buf_line_rgb_end && imgb_i < RLCD_DISP_H * RLCD_DISP_W;
+             odb_i++, imgb_i++ ){
+            
+            if( buffer_desc->memory[imgb_i].bits.r_lsb )
+                out_data_buf[ odb_i ] |= (1 << COLOUR_R_LSB_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << COLOUR_R_LSB_BIT);
+
+            if( buffer_desc->memory[imgb_i].bits.g_lsb )
+                out_data_buf[ odb_i ] |= (1 << COLOUR_G_LSB_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << COLOUR_G_LSB_BIT);
+
+            if( buffer_desc->memory[imgb_i].bits.b_lsb )
+                out_data_buf[ odb_i ] |= (1 << COLOUR_B_LSB_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << COLOUR_B_LSB_BIT);
+
+            // out_data_buf[ i ] |= 0x01;
+            // out_data_buf[ i+1 ] |= 0x02;
+            // out_data_buf[ i+2 ] |= 0x04;
+            // out_data_buf[ i+3 ] |= 0x08;
+        }
+        */
+        imgb_i = line_no * RLCD_DISP_W;
+        
+        for( uint32_t odb_i = out_buf_line_rgb_start; odb_i < out_buf_line_rgb_end; odb_i++ ){
+
+            // if( imgb_i >= RLCD_DISP_H * RLCD_DISP_W ){
+            //     ESP_LOGW( TAG, "imgb_i = %lu overflow. Returning.", imgb_i );
+            //     return;
+            // }
+            
+            if( buffer_desc->memory[imgb_i].bits.r_lsb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R0_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R0_BIT);
+
+            if( buffer_desc->memory[imgb_i].bits.g_lsb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G0_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G0_BIT);
+            
+            if( buffer_desc->memory[imgb_i].bits.b_lsb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B0_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B0_BIT);
+            
+
+            if( buffer_desc->memory[imgb_i+1].bits.r_lsb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R1_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R1_BIT);
+            
+            if( buffer_desc->memory[imgb_i+1].bits.g_lsb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G1_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G1_BIT);
+            
+            if( buffer_desc->memory[imgb_i+1].bits.b_lsb )
+                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B1_BIT);
+            else
+                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B1_BIT);
+
+            imgb_i += 2;
         }
     }
 
     // Temporarily until I manage to copy rlcd_buf into out_data_buf:
     // Swap byte pairs again 
     outDataBuf_swapBytePairs();
+
+    // ESP_LOGI( TAG, "Iterated %lu for each line.", for_cnt );
 }
 
 // 

@@ -10,18 +10,57 @@
 // Colour format:
 //  7 6 5 4 3 2 1 0 <- bit no.
 //  _______________
-// |-|-|R|R|G|G|B|B|
+// |-|-|B|B|G|G|R|R|
 // 
 typedef union {
-    uint8_t bits;
+    uint8_t val;
+    struct {
+        uint8_t r_msb       : 1;
+        uint8_t r_lsb       : 1;
+        uint8_t g_msb       : 1;
+        uint8_t g_lsb       : 1;
+        uint8_t b_msb       : 1;
+        uint8_t b_lsb       : 1;
+        uint8_t reserved    : 2;
+    } bits;
 } lcd_colour_t;
+
+// typedef struct {
+//     union {
+//         struct {
+//             uint8_t reserved    : 2;
+//             uint8_t r_msb       : 1;
+//             uint8_t r_lsb       : 1;
+//             uint8_t g_msb       : 1;
+//             uint8_t g_lsb       : 1;
+//             uint8_t b_msb       : 1;
+//             uint8_t b_lsb       : 1;
+//         } bits;
+
+//         uint8_t val;
+//     } name;
+// } lcd_colour_t;
+
+#define COLOUR_R_LSB_BIT 0
+#define COLOUR_R_MSB_BIT 1
+#define COLOUR_G_LSB_BIT 2
+#define COLOUR_G_MSB_BIT 3
+#define COLOUR_B_LSB_BIT 4
+#define COLOUR_B_MSB_BIT 5
+
+#define COLOUR_R_MSB_MASK ( 1 << COLOUR_R_MSB_BIT )
+#define COLOUR_R_LSB_MASK ( 1 << COLOUR_R_LSB_BIT )
+#define COLOUR_G_MSB_MASK ( 1 << COLOUR_G_MSB_BIT )
+#define COLOUR_G_LSB_MASK ( 1 << COLOUR_G_LSB_BIT )
+#define COLOUR_B_MSB_MASK ( 1 << COLOUR_B_MSB_BIT )
+#define COLOUR_B_LSB_MASK ( 1 << COLOUR_B_LSB_BIT )
 
 // Basic colours
 #define COLOUR_WHITE   0xff
 #define COLOUR_BLACK   0x00
-#define COLOUR_RED     0b00110000
-#define COLOUR_GREEN   0b00001100
-#define COLOUR_BLUE    0b00000011
+#define COLOUR_RED     ( COLOUR_R_MSB_MASK | COLOUR_R_LSB_MASK )
+#define COLOUR_GREEN   ( COLOUR_G_MSB_MASK | COLOUR_G_LSB_MASK )
+#define COLOUR_BLUE    ( COLOUR_B_MSB_MASK | COLOUR_B_LSB_MASK )
 
 #define COLOUR_CYAN    (COLOUR_GREEN | COLOUR_BLUE)
 #define COLOUR_MAGENTA (COLOUR_RED   | COLOUR_BLUE)
@@ -38,10 +77,14 @@ typedef union {
 
 // Display frame buffer size (in bytes).
 // Add correction for a round display or leave dummy bits as they are.
-#define RLCD_BUF_SIZE (RLCD_DISP_W * RLCD_DISP_H) //* RLCD_COLOUR_DEPTH / 8
+#define RLCD_BUF_SIZE (RLCD_DISP_W * RLCD_DISP_H) * sizeof(lcd_colour_t) //* RLCD_COLOUR_DEPTH / 8
 // #define LINE_WIDTH RLCD_DISP_W+4
 // #define RLCD_BUF_SIZE 4*LINE_WIDTH
 //(RLCD_DISP_W * RLCD_DISP_H) * sizeof(lcd_colour_t)
+
+// 
+// Hardware
+// 
 
 // GPIO line position in "config->gpio_bus" array
 #define GPIO_BUS_R0_BIT 0

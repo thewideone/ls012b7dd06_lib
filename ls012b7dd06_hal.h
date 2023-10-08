@@ -125,7 +125,10 @@ void togglePWM( void );
 
 void testTransmit( void );
 
-void rlcd_fillImage( void );
+// void rlcd_fillImage( void );
+void rlcd_fillImageWhite( void );
+void rlcd_fillImageColour( uint8_t colour );
+void rlcd_putPixel( int16_t x, int16_t y, uint8_t colour );
 void rlcd_updateImageBuf( void );   //bool all_black );
 
 void rlcd_resume( void );

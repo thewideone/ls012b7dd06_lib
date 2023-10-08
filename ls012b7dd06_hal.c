@@ -19,8 +19,10 @@
 // #include "driver/mcpwm.h"       // for VCOM, VA and VB signals
 #include "driver/mcpwm_prelude.h"   // for VCOM, VA and VB signals
 
-uint8_t rlcd_buf[RLCD_BUF_SIZE] = { //[RLCD_BUF_SIZE] = {
-    0xff
+lcd_colour_t rlcd_buf[RLCD_BUF_SIZE] = {
+    // .bits = (uint8_t) 0xff,
+    // 0xff
+    // 0x00
     //0x00, 0x00, // 2 dummy bits (clock edges) in front
     // 0x00, 0x00, 0xff,
     // 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80,
@@ -813,17 +815,39 @@ void togglePWM( void ){
 
 void rlcd_clearImageBuf( void ){
     for( uint16_t i=0; i < RLCD_BUF_SIZE; i++ ){
-        rlcd_buf[i] = 0x00;
+        rlcd_buf[i].val = 0x00;
     }
 }
 
-void rlcd_fillImage( void ){
-    for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
-        rlcd_buf[i] = (1<<2);
+void rlcd_fillImageWhite( void ){
+    for( uint32_t i=0; i < RLCD_DISP_W * RLCD_DISP_H; i++ ){
+        rlcd_buf[i].val = 0xff;
     }
-    for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
-        rlcd_buf[2*i] = (1<<3);
+    // for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
+    //     rlcd_buf[i].val = (1<<2);
+    // }
+    // for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
+    //     rlcd_buf[2*i].val = (1<<3);
+    // }
+}
+
+void rlcd_fillImageColour( uint8_t colour ){
+    for( uint32_t i=0; i < RLCD_DISP_W * RLCD_DISP_H; i++ ){
+        rlcd_buf[i].val = colour;
     }
+}
+
+// 
+// Draw a single pixel.
+// x, y - coordinates of the pixel,
+//        signed int, to make drawing of big pictures easier
+// colour - colour of the pixel
+// 
+void rlcd_putPixel( int16_t x, int16_t y, uint8_t colour ){
+    if( (x < 0) || (x > RLCD_DISP_W) || (y < 0) || (y > RLCD_DISP_H) )
+        return;
+    
+    rlcd_buf[ x + (y * RLCD_DISP_W) ].val = colour;
 }
 
 void rlcd_updateImageBuf( void ){   // bool all_black ){

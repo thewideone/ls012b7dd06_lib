@@ -13,7 +13,7 @@ typedef enum {
 } i2s_parallel_cfg_bits_t;
 
 typedef struct {
-    void* memory;
+    lcd_colour_t* memory;
     size_t size;
 } i2s_parallel_buffer_desc_t;
 
