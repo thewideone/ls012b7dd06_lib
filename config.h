@@ -7,6 +7,14 @@
 // 
 
 // 
+// Colours
+// 
+
+// Display colour depth (in bits per channel).
+// Add a possibility to make it 1 or monochrome?
+#define RLCD_COLOUR_DEPTH 2
+
+// 
 // Colour format:
 //  7 6 5 4 3 2 1 0 <- bit no.
 //  _______________
@@ -36,11 +44,12 @@ typedef union {
 //             uint8_t b_msb       : 1;
 //             uint8_t b_lsb       : 1;
 //         } bits;
-
+//
 //         uint8_t val;
 //     } name;
 // } lcd_colour_t;
 
+// Colour bit positions from the above struct
 #define COLOUR_R_LSB_BIT 0
 #define COLOUR_R_MSB_BIT 1
 #define COLOUR_G_LSB_BIT 2
@@ -48,6 +57,7 @@ typedef union {
 #define COLOUR_B_LSB_BIT 4
 #define COLOUR_B_MSB_BIT 5
 
+// Colour bit masks
 #define COLOUR_R_MSB_MASK ( 1 << COLOUR_R_MSB_BIT )
 #define COLOUR_R_LSB_MASK ( 1 << COLOUR_R_LSB_BIT )
 #define COLOUR_G_MSB_MASK ( 1 << COLOUR_G_MSB_BIT )
@@ -66,14 +76,14 @@ typedef union {
 #define COLOUR_MAGENTA (COLOUR_RED   | COLOUR_BLUE)
 #define COLOUR_YELLOW  (COLOUR_RED   | COLOUR_GREEN)
 
+// 
+// Display dimensions and buffer
+// 
+
 // Display width
 #define RLCD_DISP_W 240
 // Display height
 #define RLCD_DISP_H 240
-
-// Display colour depth (in bits per channel).
-// Add a possibility to make it 1 or monochrome?
-#define RLCD_COLOUR_DEPTH 2
 
 // Display frame buffer size (in bytes).
 // Add correction for a round display or leave dummy bits as they are.
@@ -86,7 +96,7 @@ typedef union {
 // Hardware
 // 
 
-// GPIO line position in "config->gpio_bus" array
+// GPIO signal position in "config->gpio_bus" array
 #define GPIO_BUS_R0_BIT 0
 #define GPIO_BUS_R1_BIT 1
 #define GPIO_BUS_G0_BIT 2
@@ -98,14 +108,14 @@ typedef union {
 
 // #define RLCD_BCK_FREQ 5000000
 
-// thwGEN defined by the number of pixels
+// thwGEN defined by the number of pixels,
 // that would be equivalently transmitted in that time.
 // 
 // thwGEN = 10us
 // thwGEN / ( tsRGB + thRGB ) = 10us / 400ns = 25
 #define THWGEN_LEN 25
 
-// thhGCK defined by the number of pixels
+// thhGCK defined by the number of pixels,
 // that would be equivalently transmitted in that time.
 // 
 // thhGCK = 4.8us

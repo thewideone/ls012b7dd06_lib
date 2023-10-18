@@ -50,7 +50,12 @@
 
 // 35, 34, 37, 38 input only
 
+
+
+// 
 // Time definitions
+// 
+
 // GPIO level change with no additional delay takes roughly 330ns.
 
 // BSP setup time high level [ns]
@@ -92,6 +97,7 @@
 // Hold time (high level) [us]
 #define thhINTB 63
 
+// 1 / thwBCK[ns] = (10^9 / thwBCK) [Hz]
 #define RLCD_BCK_FREQ ( 1000000000/thwBCK )   // 2.5MHz
 #define RLCD_RGB_FREQ ( 1000000000/thRGB  )   // 5MHz
 
@@ -104,15 +110,7 @@
 
 #define RLCD_INTB_FREQ 400000   // 0.4MHz, 2.5us resolution
 
-#define LEDC_TIMER              LEDC_TIMER_0
-#define LEDC_MODE               LEDC_LOW_SPEED_MODE
-#define LEDC_OUTPUT_IO          (RLCD_VA) // Define the output GPIO
-#define LEDC_CHANNEL            LEDC_CHANNEL_0
-#define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Set duty resolution to 13 bits
-#define LEDC_DUTY               (4095) // Set duty to 50%. ((2 ** 13) - 1) * 50% = 4095
-#define LEDC_FREQUENCY          (29) // Frequency in Hertz. Set frequency at 5 kHz
-
-#include "i2s_parallel_driver/i2s_parallel.h"
+// #include "i2s_parallel_driver/i2s_parallel.h"
 // // Extern here used for temporary config tests
 // extern i2s_parallel_buffer_desc_t bufdesc;
 

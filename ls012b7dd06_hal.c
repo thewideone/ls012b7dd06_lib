@@ -255,7 +255,7 @@ rmt_encoder_handle_t rlcd_gck_encoder_handle = NULL;
 rmt_encoder_handle_t rlcd_gsp_encoder_handle = NULL;
 rmt_encoder_handle_t rlcd_intb_encoder_handle = NULL;
 
-// All bits are '1's except of the first and the last one.
+// All bits are '1's except of the first one.
 // This should give total of 62 periods of BCK (that is binary '1's),
 // that is 2 dummy periods and 60 for RGB data.
 // The first and the last bit can be used for time adjustment of
@@ -560,6 +560,9 @@ bool pwm_is_enabled = false;
 
 mcpwm_sync_handle_t timer_sync_handle;
 
+// 
+// Enable PWM signal generation.
+// 
 void pwm_enable( void ){
     ESP_ERROR_CHECK( mcpwm_timer_start_stop( pwm_timer_handle, MCPWM_TIMER_START_NO_STOP ) );
     vTaskDelay( 20 / portTICK_PERIOD_MS );
@@ -567,6 +570,9 @@ void pwm_enable( void ){
     // ESP_ERROR_CHECK( mcpwm_soft_sync_activate( timer_sync_handle ) );
 }
 
+// 
+// Disable PWM signal generation.
+// 
 void pwm_disable( void ){
     ESP_ERROR_CHECK( mcpwm_timer_start_stop( pwm_timer_handle_VB, MCPWM_TIMER_STOP_FULL ) );
     vTaskDelay( 20 / portTICK_PERIOD_MS );
@@ -575,6 +581,11 @@ void pwm_disable( void ){
     // ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_b, 0, false ) );
 }
 
+// 
+// Configure MCPWM generators.
+// gena, genb - MCPWM generator handles
+// cmpa, cmpb - MCPWM comparator handles
+// 
 static void gen_action_config(mcpwm_gen_handle_t gena, mcpwm_gen_handle_t genb, mcpwm_cmpr_handle_t cmpa, mcpwm_cmpr_handle_t cmpb){
     ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(gena,
                     MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
@@ -656,6 +667,9 @@ static void gen_action_config(mcpwm_gen_handle_t gena, mcpwm_gen_handle_t genb, 
 //     ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_b, 0, false ) );
 // }
 
+// 
+// Configure and enable MCPWM timers to generate VA and VB/VCOM signals.
+// 
 void va_vb_init( void ){
     ESP_LOGI(TAG, "Create timer and operator");
     mcpwm_timer_config_t timer_config = {
@@ -797,6 +811,9 @@ void va_vb_init( void ){
     // ESP_ERROR_CHECK(mcpwm_timer_start_stop(pwm_timer_handle_VB, MCPWM_TIMER_START_NO_STOP));
 }
 
+// 
+// Enable or disable generation of PWM signals.
+// 
 void togglePWM( void ){
     while(1){
         if( pwm_is_enabled ){
@@ -812,13 +829,18 @@ void togglePWM( void ){
     }
 }
 
-
+// 
+// Clear the screen image buffer.
+// 
 void rlcd_clearImageBuf( void ){
     for( uint16_t i=0; i < RLCD_BUF_SIZE; i++ ){
         rlcd_buf[i].val = 0x00;
     }
 }
 
+// 
+// Fill the image buffer with white colour.
+// 
 void rlcd_fillImageWhite( void ){
     for( uint32_t i=0; i < RLCD_DISP_W * RLCD_DISP_H; i++ ){
         rlcd_buf[i].val = 0xff;
@@ -831,6 +853,11 @@ void rlcd_fillImageWhite( void ){
     // }
 }
 
+// 
+// Fill the image buffer with given colour.
+// colour - colour the whole image will be filled with,
+//          has to be compatible with lcd_colour_t.
+// 
 void rlcd_fillImageColour( uint8_t colour ){
     for( uint32_t i=0; i < RLCD_DISP_W * RLCD_DISP_H; i++ ){
         rlcd_buf[i].val = colour;
@@ -850,11 +877,18 @@ void rlcd_putPixel( int16_t x, int16_t y, uint8_t colour ){
     rlcd_buf[ x + (y * RLCD_DISP_W) ].val = colour;
 }
 
+// 
+// Store data from the image buffer in the I2S data buffer.
+// After calling this function, a new frame can be drawn
+// on the image buffer.
 void rlcd_updateImageBuf( void ){   // bool all_black ){
     outDataBuf_update();
     // i2s_updateOutputBuf( &I2S1, all_black );
 }
 
+// 
+// Turn on the LCD.
+// 
 void rlcd_resume( void ){
     // Power-on sequence:
 
@@ -887,6 +921,9 @@ void rlcd_resume( void ){
     vTaskDelay( 50 / portTICK_PERIOD_MS );
 }
 
+// 
+// Shut the LCD down.
+// 
 void rlcd_suspend( void ){
     // Power off sequence:
 
@@ -910,6 +947,10 @@ void rlcd_suspend( void ){
 
 }
 
+// 
+// Initialize ESP32 peripherals and software
+// to handle the LCD (not the display itself).
+// 
 void rlcd_init( void ){
     rlcd_setupPins();
     rlcd_setAllGPIOs( 0 );
@@ -1157,7 +1198,9 @@ void rlcd_init( void ){
 }
 
 
-
+// 
+// Send one frame to the LCD, using ESP32's hardware.
+// 
 void testTransmit( void ){
     
     i2s_prepareTx( &I2S1 );
