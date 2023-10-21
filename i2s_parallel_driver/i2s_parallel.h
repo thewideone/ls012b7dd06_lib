@@ -36,8 +36,6 @@ typedef struct {
 
     // uint8_t tx_chan_mod;
     // uint8_t rx_chan_mod;
-    // uint16_t tx_right_first : 1;
-    // uint16_t rx_right_first : 1;
     // uint16_t tx_msb_right : 1;
     // uint16_t rx_msb_right : 1;
     // uint16_t tx_chan_mod : 3;
