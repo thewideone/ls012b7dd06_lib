@@ -53,6 +53,24 @@ void rlcd_drawLine( int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint8_t colo
 	}
 }
 
+void rlcd_drawFillRect( int16_t x, int16_t y, int16_t w, int16_t h, uint8_t colour ){
+	for( int16_t i = x; i < x + w; i++ ){
+		rlcd_drawFastVLine( i, y, h, colour );
+	}
+}
+
+void rlcd_drawFastVLine( int16_t x, int16_t y, uint8_t h, uint8_t colour ){
+	for( int16_t i = y; i < y + h; i++ )
+		rlcd_putPixel( x, i, colour );
+	//rlcd_drawLine( x, y, x, y+h-1, colour );
+}
+
+void rlcd_drawFastHLine( int16_t x, int16_t y, uint8_t w, uint8_t colour ){
+	for( int16_t i = x; i< x + w; i++ )
+		rlcd_putPixel( x,i,colour );
+	// rlcd_drawLine( x, y, x+w-1, y, colour );
+}
+
 void rlcd_drawChar( int16_t x, int16_t y, char c, uint8_t colour, uint8_t bg, uint8_t size ){
 
 	if( (x >= RLCD_DISP_W) || (y >= RLCD_DISP_H) || ( (x + 6 * size - 1) < 0 ) || ( (y + 8 * size - 1) < 0 ) )
@@ -85,20 +103,17 @@ void rlcd_drawChar( int16_t x, int16_t y, char c, uint8_t colour, uint8_t bg, ui
 	}
 }
 
-void rlcd_drawFillRect( int16_t x, int16_t y, int16_t w, int16_t h, uint8_t colour ){
-	for( int16_t i = x; i < x + w; i++ ){
-		rlcd_drawFastVLine( i, y, h, colour );
+void rlcd_putStr( int16_t x, int16_t y, char* str, uint8_t colour, uint8_t bg, uint8_t txt_size ){
+
+	int16_t cursor_x = x, cursor_y = y;
+
+	// Character counter to avoid writing
+	// garbage data in an infinite loop.
+	uint8_t char_cnt = 0;
+
+	while( *str && char_cnt <= RLCD_STR_MAX_CHAR_CNT ){
+		rlcd_drawChar( cursor_x, cursor_y, *str++, colour, bg, txt_size );
+		cursor_x += txt_size*( FONT_WIDTH + FONT_SPACE_BETWEEN_CHARS );
+		char_cnt++;
 	}
-}
-
-void rlcd_drawFastVLine( int16_t x, int16_t y, uint8_t h, uint8_t colour ){
-	for( int16_t i = y; i < y + h; i++ )
-		rlcd_putPixel( x, i, colour );
-	//rlcd_drawLine( x, y, x, y+h-1, colour );
-}
-
-void rlcd_drawFastHLine( int16_t x, int16_t y, uint8_t w, uint8_t colour ){
-	for( int16_t i = x; i< x + w; i++ )
-		rlcd_putPixel( x,i,colour );
-	// rlcd_drawLine( x, y, x+w-1, y, colour );
 }

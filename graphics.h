@@ -10,5 +10,6 @@ void rlcd_drawFastHLine( int16_t x, int16_t y, uint8_t w, uint8_t colour );
 void rlcd_drawFillRect( int16_t x, int16_t y, int16_t w, int16_t h, uint8_t colour );
 
 void rlcd_drawChar( int16_t x, int16_t y, char c, uint8_t colour, uint8_t bg, uint8_t size );
+void rlcd_putStr( int16_t x, int16_t y, char* str, uint8_t colour, uint8_t bg, uint8_t txt_size );
 
 #endif // _LCD_GRAPHICS_H_

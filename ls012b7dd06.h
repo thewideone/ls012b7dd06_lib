@@ -5,6 +5,12 @@
 
 #include "graphics.h"
 
+#include "esp_log.h"
+
+// #include "freertos/semphr.h"	// for mutex
+
+// static SemaphoreHandle_t mutex_handle_lcd;
+
 // extern void rlcd_init( void );
 extern void rlcd_testGPIOs( uint8_t pins_state );
 
@@ -21,5 +27,7 @@ extern void rlcd_updateImageBuf( void );
 
 extern void rlcd_resume( void );
 extern void rlcd_suspend( void );
+
+// int rlcd_vprintf_func( const char *szFormat, va_list args );
 
 #endif // _LS012B7DD06_LIB_H_

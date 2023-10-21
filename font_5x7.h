@@ -1,6 +1,11 @@
 #ifndef _FONT_5X7_H_
 #define _FONT_5X7_H_
 
+// Font info (dimensions in pixels)
+#define FONT_WIDTH 5
+#define FONT_HEIGHT 7
+#define FONT_SPACE_BETWEEN_CHARS 1
+
 const uint8_t font_5x7[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00,
 	0x3E, 0x5B, 0x4F, 0x5B, 0x3E,
