@@ -126,5 +126,4 @@ typedef union {
 // 35 periods are for 14us of GEN signaling
 #define RGB_CLK_TRAILING_DUMMY_PERIOD_CNT ( THWGEN_LEN + THHGCK_LEN + 1)//( RGB_CLK_LEADING_DUMMY_PERIOD_CNT + 33 )
 
-
 #endif // _RLCD_CONFIG_H_

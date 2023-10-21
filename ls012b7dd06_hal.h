@@ -10,7 +10,6 @@
 // Notes
 // 
 // Make a general lib files like rlcd.h & *.c for abstract functions.
-// Use a timer for VA, VB and VCOM.
 
 // Pin definitions
 // To use some of them, gpio_reset(pin_number) has to be called first.
@@ -121,9 +120,9 @@ void rlcd_testGPIOs( uint8_t pins_state );
 
 void togglePWM( void );
 
-void testTransmit( void );
+void rlcd_sendFrame( void );
 
-// void rlcd_fillImage( void );
+void rlcd_fillImageBlack( void );
 void rlcd_fillImageWhite( void );
 void rlcd_fillImageColour( uint8_t colour );
 void rlcd_putPixel( int16_t x, int16_t y, uint8_t colour );

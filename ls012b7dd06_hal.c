@@ -658,15 +658,6 @@ static void gen_action_config(mcpwm_gen_handle_t gena, mcpwm_gen_handle_t genb, 
     //                 MCPWM_GEN_TIMER_EVENT_ACTION_END()));
 }
 
-// mcpwm_timer_event_cb_t pwm_cb( mcpwm_timer_handle_t ){
-
-// }
-
-// void IRAM_ATTR isr_handler( void ){
-//     ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_a, 0, false ) );
-//     ESP_ERROR_CHECK( mcpwm_generator_set_force_level( genr_b, 0, false ) );
-// }
-
 // 
 // Configure and enable MCPWM timers to generate VA and VB/VCOM signals.
 // 
@@ -676,7 +667,7 @@ void va_vb_init( void ){
         .group_id = 0,
         .clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT,
         .resolution_hz = 1000000,   // 1us resolution
-        .period_ticks = 40000,      // 34000us = 34ms
+        .period_ticks = 40000,      // 40000us - 25Hz
         .count_mode = MCPWM_TIMER_COUNT_MODE_UP//_DOWN,
     };
     ESP_ERROR_CHECK(mcpwm_new_timer(&timer_config, &pwm_timer_handle));
@@ -685,7 +676,7 @@ void va_vb_init( void ){
         .group_id = 1,
         .clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT,
         .resolution_hz = 1000000,   // 1us resolution
-        .period_ticks = 40000,      // 34000us = 34ms
+        .period_ticks = 40000,      // 40000us - 25Hz
         .count_mode = MCPWM_TIMER_COUNT_MODE_UP//_DOWN,
     };
     ESP_ERROR_CHECK(mcpwm_new_timer(&timer_config_VB, &pwm_timer_handle_VB));
@@ -830,9 +821,10 @@ void togglePWM( void ){
 }
 
 // 
-// Clear the screen image buffer.
+// Fill the image buffer with black colour
+// (clear the screen image buffer).
 // 
-void rlcd_clearImageBuf( void ){
+void rlcd_fillImageBlack( void ){
     for( uint16_t i=0; i < RLCD_BUF_SIZE; i++ ){
         rlcd_buf[i].val = 0x00;
     }
@@ -845,18 +837,12 @@ void rlcd_fillImageWhite( void ){
     for( uint32_t i=0; i < RLCD_DISP_W * RLCD_DISP_H; i++ ){
         rlcd_buf[i].val = 0xff;
     }
-    // for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
-    //     rlcd_buf[i].val = (1<<2);
-    // }
-    // for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
-    //     rlcd_buf[2*i].val = (1<<3);
-    // }
 }
 
 // 
 // Fill the image buffer with given colour.
 // colour - colour the whole image will be filled with,
-//          has to be compatible with lcd_colour_t.
+//          has to be compatible with lcd_colour_t
 // 
 void rlcd_fillImageColour( uint8_t colour ){
     for( uint32_t i=0; i < RLCD_DISP_W * RLCD_DISP_H; i++ ){
@@ -868,7 +854,8 @@ void rlcd_fillImageColour( uint8_t colour ){
 // Draw a single pixel.
 // x, y - coordinates of the pixel,
 //        signed int, to make drawing of big pictures easier
-// colour - colour of the pixel
+// colour - colour of the pixel,
+//          has to be compatible with lcd_colour_t
 // 
 void rlcd_putPixel( int16_t x, int16_t y, uint8_t colour ){
     if( (x < 0) || (x > RLCD_DISP_W) || (y < 0) || (y > RLCD_DISP_H) )
@@ -881,9 +868,8 @@ void rlcd_putPixel( int16_t x, int16_t y, uint8_t colour ){
 // Store data from the image buffer in the I2S data buffer.
 // After calling this function, a new frame can be drawn
 // on the image buffer.
-void rlcd_updateImageBuf( void ){   // bool all_black ){
+void rlcd_updateImageBuf( void ){
     outDataBuf_update();
-    // i2s_updateOutputBuf( &I2S1, all_black );
 }
 
 // 
@@ -900,11 +886,11 @@ void rlcd_resume( void ){
 
     // Pixel memory init: write all screen black.
     // rlcd_fillBlack();
-    // rlcd_clearImageBuf();
+    // rlcd_fillImageBlack();
     // rlcd_updateImageBuf( true );
     outDataBuf_clearImage();
     vTaskDelay( 10 / portTICK_PERIOD_MS );
-    testTransmit();
+    rlcd_sendFrame();
 
     // Wait for the end of the image transmission
     vTaskDelay( 40 / portTICK_PERIOD_MS );
@@ -922,7 +908,7 @@ void rlcd_resume( void ){
 }
 
 // 
-// Shut the LCD down.
+// Shut down the LCD.
 // 
 void rlcd_suspend( void ){
     // Power off sequence:
@@ -934,7 +920,7 @@ void rlcd_suspend( void ){
     // Pixel memory init: write all screen black.
     outDataBuf_clearImage();
     vTaskDelay( 10 / portTICK_PERIOD_MS );
-    testTransmit();
+    rlcd_sendFrame();
 
     vTaskDelay( 40 / portTICK_PERIOD_MS );
 
@@ -1084,7 +1070,7 @@ void rlcd_init( void ){
     // for( uint16_t i=0; i < RLCD_DISP_W; i++ ){
     //     rlcd_buf[2*i] = (1<<3);
     // }
-    rlcd_clearImageBuf();
+    rlcd_fillImageBlack();
 
     /*
 
@@ -1171,8 +1157,10 @@ void rlcd_init( void ){
 
     vTaskDelay(50 / portTICK_PERIOD_MS);
 
-    ESP_LOGD( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
-                    cfg.tx_right_first, cfg.rx_right_first, cfg.tx_msb_right, cfg.rx_msb_right, cfg.tx_chan_mod, cfg.rx_chan_mod );
+    // ESP_LOGD( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d,\n tx_msb_right=%d,\n rx_msb_right=%d,\n tx_chan_mod=%d,\n rx_chan_mod=%d",
+    //                 cfg.tx_right_first, cfg.rx_right_first, cfg.tx_msb_right, cfg.rx_msb_right, cfg.tx_chan_mod, cfg.rx_chan_mod );
+    ESP_LOGD( TAG, "I2S init done with flags:\n tx_right_first=%d,\n rx_right_first=%d\n",
+                    cfg.tx_right_first, cfg.rx_right_first );
 
     rlcd_rmt_installEncoderGCK( rmt_ch_array );
     rlcd_rmt_installEncoderGSP( rmt_ch_array );
@@ -1201,7 +1189,7 @@ void rlcd_init( void ){
 // 
 // Send one frame to the LCD, using ESP32's hardware.
 // 
-void testTransmit( void ){
+void rlcd_sendFrame( void ){
     
     i2s_prepareTx( &I2S1 );
 

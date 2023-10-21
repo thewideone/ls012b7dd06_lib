@@ -307,6 +307,7 @@ void IRAM_ATTR i2s_isr( void *arg ){
     i2s_goToNextDMADesc( (i2s_dev_t*)arg );
 }
 
+/* Unused functions
 // 
 // Calculate the number of DMA descriptors needed for a buffer descriptor.
 // 
@@ -357,6 +358,7 @@ static void init_empty_dma_desc( volatile lldesc_t dma_desc ) {
     // ESP_LOGD( TAG, "init_dma_desc_array(): filled %d descriptor(s)", n );
 }
 
+
 // 
 // Init DMA descriptor array.
 // dma_desc_array   - array of DMA descriptors
@@ -401,6 +403,8 @@ static void init_dma_desc_array(volatile lldesc_t* dma_desc_array, i2s_parallel_
     // dma_desc_array[n-1].qe.stqe_next = (lldesc_t*) &dma_desc_array[0];
     ESP_LOGD( TAG, "init_dma_desc_array(): filled %d descriptor(s)", n );
 }
+
+*/
 
 // 
 // Init empty DMA descriptor array.
@@ -721,9 +725,12 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
             dummy_px_cnt = rlcd_dummy_px_cnt[ (RLCD_DISP_H-1) - line_no ];
 
         // Don't fill these dummy pixels with image data to save time:
-        out_buf_line_rgb_start_idx  += dummy_px_cnt;
-        out_buf_line_rgb_end_idx    -= dummy_px_cnt;
-        imgb_i += dummy_px_cnt;
+        // Need to adjust these numbers or resign from using them here
+        // and modify the for loop below
+        // out_buf_line_rgb_start_idx  += dummy_px_cnt/2;
+        // out_buf_line_rgb_end_idx    -= dummy_px_cnt/2;
+
+        // imgb_i += dummy_px_cnt;
 
         // for_cnt = 0;
 
@@ -734,6 +741,9 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
             //     ESP_LOGW( TAG, "imgb_i = %lu overflow. Returning.", imgb_i );
             //     return;
             // }
+            
+            // if( odb_i = out_buf_line_rgb_start_idx && ( dummy_px_cnt % 2 ) )
+            //     continue;
             
             if( buffer_desc->memory[imgb_i].bits.r_msb )
                 out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R0_BIT);
@@ -813,9 +823,9 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
         imgb_i = line_no * RLCD_DISP_W;
 
         // Don't fill dummy pixels with image data to save time:
-        out_buf_line_rgb_start_idx  += dummy_px_cnt;
-        out_buf_line_rgb_end_idx    -= dummy_px_cnt;
-        imgb_i += dummy_px_cnt;
+        // out_buf_line_rgb_start_idx  += dummy_px_cnt/2;
+        // out_buf_line_rgb_end_idx    -= dummy_px_cnt/2;
+        // imgb_i += dummy_px_cnt;
         
         for( uint32_t odb_i = out_buf_line_rgb_start_idx; odb_i < out_buf_line_rgb_end_idx; odb_i++ ){
 
