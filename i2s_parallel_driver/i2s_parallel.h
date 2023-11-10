@@ -1,6 +1,22 @@
 #ifndef _I2S_PARALLEL_DRIVER_H_
 #define _I2S_PARALLEL_DRIVER_H_
 
+// 
+// A I2S library for LS012B7DD06 reflective LCD based on
+// har-in-air's ESP32-LCD-I2S project:
+// https://github.com/har-in-air/ESP32-LCD-I2S
+// bitluni's I2S library:
+// https://github.com/bitluni/ESP32Lib
+// and kargeor's "ESP32_I2S1_overclock.ino" sketch:
+// https://gist.github.com/kargeor/b4200fc859a8e6c2234701368c82acd2
+// 
+// Used for sending image buffer to the LCD.
+// Uses a separate output data buffer containing:
+//  - encoded control signals (BSP and GEN) and
+//  - encoded pixel data
+// which is send to the display directly over I2S.
+// 
+
 #include <stdint.h>
 #include "soc/i2s_struct.h"
 

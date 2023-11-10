@@ -505,7 +505,7 @@ void outDataBuf_swapBytePairs( void ){
 
 // 
 // Prepare the output I2S data buffer (out_data_buf[]):
-//  - encode control signals
+//  - encode control signals (BSP and GEN)
 //  - swap byte pairs
 // Fill the array of DMA descriptors with image data.
 // dev          - I2S device handle
@@ -717,20 +717,32 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
 
         // Get the number of dummy pixels in current video line of the round display:
         uint8_t dummy_px_cnt;
+        // Dummy pixel parity flag; set if the number of dummy pixels is even:
+        uint8_t dummy_px_parity = 0;
         // If current line is in the upper half of the display:
         if( line_no < RLCD_DISP_H / 2 )
             dummy_px_cnt = rlcd_dummy_px_cnt[ line_no ];
         // Or if the current line is in the lower half of the display:
         else
             dummy_px_cnt = rlcd_dummy_px_cnt[ (RLCD_DISP_H-1) - line_no ];
+        
+        if( dummy_px_cnt % 2 == 0 )
+            dummy_px_parity = 1;
 
         // Don't fill these dummy pixels with image data to save time:
         // Need to adjust these numbers or resign from using them here
         // and modify the for loop below
-        // out_buf_line_rgb_start_idx  += dummy_px_cnt/2;
-        // out_buf_line_rgb_end_idx    -= dummy_px_cnt/2;
+        out_buf_line_rgb_start_idx  += dummy_px_cnt/2;
+        if( dummy_px_cnt > 1 )
+            out_buf_line_rgb_end_idx    -= dummy_px_cnt/2;
 
-        // imgb_i += dummy_px_cnt;
+        imgb_i += dummy_px_cnt;
+
+        if( dummy_px_cnt > 0 && dummy_px_parity == 0 ){
+            // out_buf_line_rgb_end_idx++;  // can't do this! is affects control signal data!
+            imgb_i--;
+        }
+
 
         // for_cnt = 0;
 
@@ -744,37 +756,44 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
             
             // if( odb_i = out_buf_line_rgb_start_idx && ( dummy_px_cnt % 2 ) )
             //     continue;
-            
-            if( buffer_desc->memory[imgb_i].bits.r_msb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R0_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R0_BIT);
 
-            if( buffer_desc->memory[imgb_i].bits.g_msb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G0_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G0_BIT);
+            // Odd pixels:
             
-            if( buffer_desc->memory[imgb_i].bits.b_msb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B0_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B0_BIT);
-            
+            // if( ( odb_i != out_buf_line_rgb_start_idx ) || (odb_i == out_buf_line_rgb_start_idx && dummy_px_parity ) ){
+                if( buffer_desc->memory[imgb_i].bits.r_msb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R0_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R0_BIT);
 
-            if( buffer_desc->memory[imgb_i+1].bits.r_msb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R1_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R1_BIT);
+                if( buffer_desc->memory[imgb_i].bits.g_msb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G0_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G0_BIT);
+                
+                if( buffer_desc->memory[imgb_i].bits.b_msb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B0_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B0_BIT);
+            // }
             
-            if( buffer_desc->memory[imgb_i+1].bits.g_msb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G1_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G1_BIT);
-            
-            if( buffer_desc->memory[imgb_i+1].bits.b_msb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B1_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B1_BIT);
+            // Even pixels:
+
+            // if( ( odb_i != (out_buf_line_rgb_end_idx - 1) ) || (odb_i == (out_buf_line_rgb_end_idx - 1) && dummy_px_parity ) ){
+                if( buffer_desc->memory[imgb_i+1].bits.r_msb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R1_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R1_BIT);
+                
+                if( buffer_desc->memory[imgb_i+1].bits.g_msb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G1_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G1_BIT);
+                
+                if( buffer_desc->memory[imgb_i+1].bits.b_msb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B1_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B1_BIT);
+            // }
 
             imgb_i += 2;
 
@@ -823,9 +842,15 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
         imgb_i = line_no * RLCD_DISP_W;
 
         // Don't fill dummy pixels with image data to save time:
-        // out_buf_line_rgb_start_idx  += dummy_px_cnt/2;
-        // out_buf_line_rgb_end_idx    -= dummy_px_cnt/2;
-        // imgb_i += dummy_px_cnt;
+        out_buf_line_rgb_start_idx  += dummy_px_cnt/2;
+        if( dummy_px_cnt > 1 )
+            out_buf_line_rgb_end_idx    -= dummy_px_cnt/2;
+        imgb_i += dummy_px_cnt;
+
+        if( dummy_px_cnt > 0 && dummy_px_parity == 0 ){
+            // out_buf_line_rgb_end_idx++;  // can't do this! is affects control signal data!
+            imgb_i--;
+        }
         
         for( uint32_t odb_i = out_buf_line_rgb_start_idx; odb_i < out_buf_line_rgb_end_idx; odb_i++ ){
 
@@ -833,22 +858,27 @@ void IRAM_ATTR outDataBuf_encodeImage( i2s_parallel_buffer_desc_t* buffer_desc )
             //     ESP_LOGW( TAG, "imgb_i = %lu overflow. Returning.", imgb_i );
             //     return;
             // }
-            
-            if( buffer_desc->memory[imgb_i].bits.r_lsb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R0_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R0_BIT);
 
-            if( buffer_desc->memory[imgb_i].bits.g_lsb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G0_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G0_BIT);
-            
-            if( buffer_desc->memory[imgb_i].bits.b_lsb )
-                out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B0_BIT);
-            else
-                out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B0_BIT);
-            
+            // Odd pixels:
+
+            // if( ( odb_i != out_buf_line_rgb_start_idx ) || (odb_i == out_buf_line_rgb_start_idx && dummy_px_parity ) ){
+                if( buffer_desc->memory[imgb_i].bits.r_lsb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R0_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_R0_BIT);
+
+                if( buffer_desc->memory[imgb_i].bits.g_lsb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_G0_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_G0_BIT);
+                
+                if( buffer_desc->memory[imgb_i].bits.b_lsb )
+                    out_data_buf[ odb_i ] |= (1 << GPIO_BUS_B0_BIT);
+                else
+                    out_data_buf[ odb_i ] &= ~(1 << GPIO_BUS_B0_BIT);
+            // }
+
+            // Even pixels:
 
             if( buffer_desc->memory[imgb_i+1].bits.r_lsb )
                 out_data_buf[ odb_i ] |= (1 << GPIO_BUS_R1_BIT);
